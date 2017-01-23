@@ -39,9 +39,9 @@ public class LogicalSortedForest<N> {
     private Map<N, List<N>> successors;
 
     /**
-     * The list of trees.
+     * The list of leaf nodes.
      */
-    private List<Tree<N>> trees;
+    private List<Node<N>> leaves;
 
     private LogicalSortedForest(ImmutableMap<N, N> orderingMap) {
         List<N> orderingList = orderingMap.entrySet().stream()
@@ -53,19 +53,17 @@ public class LogicalSortedForest<N> {
             successorsBuilder.put(orderingList.get(i+1), orderingList.subList(i+2, orderingList.size()));
         }
         successors = successorsBuilder.build();
-        trees = successors.keySet().stream()
-                .map(Tree::ofRoot)
-                .collect(Collectors.toCollection(ArrayList::new));
+        leaves = successors.keySet().stream()
+                .map(Node::root)
+                .collect(Collectors.toList());
     }
 
     /**
-     * Returns a stream that has the leaf nodes of this forest as its source.
+     * Returns a sequential stream with the leaf nodes of this forest as its source.
      * @return
      */
     public Stream<N> fringe() {
-        return trees.stream()
-                .flatMap(Tree::leaves)
-                .map(Node::getElement);
+        return leaves.stream().map(Node::getElement);
     }
 
     /**
@@ -82,8 +80,9 @@ public class LogicalSortedForest<N> {
     }
 
     /**
-     * Builds a <code>Stream</code> of nodes whose parent is <code>n</code>, and whose elements are
-     * obtained by invoking {@link #successor(Object)} on the element stored in <code>n</code>.
+     * Builds a sequential <code>Stream</code> of nodes whose parent is <code>n</code>,
+     * and whose elements are obtained by invoking {@link #successor(Object)}
+     * on the element stored in <code>n</code>.
      * @param n
      * @return
      */
@@ -97,7 +96,7 @@ public class LogicalSortedForest<N> {
      * @return
      */
     public boolean isEmpty() {
-        return trees.stream().allMatch(Tree::isEmpty);
+        return leaves.isEmpty();
     }
 
     /**
@@ -141,34 +140,27 @@ public class LogicalSortedForest<N> {
      */
     public void expand(Predicate<Stream<N>> flagForRemoval) {
         Objects.requireNonNull(flagForRemoval);
-        trees = trees.stream()
-                .map(tree -> tree.leaves()
-                        .filter(leaf -> !flagForRemoval.test(leaf.getReachable()))
-                        .flatMap(this::buildChildren)
-                        .collect(Tree.toTree()))
-                .filter(tree -> !tree.isEmpty())
-                .collect(Collectors.toCollection(ArrayList::new));
+        leaves = leaves.parallelStream()
+                .filter(leaf -> !flagForRemoval.test(leaf.getReachable()))
+                .flatMap(this::buildChildren)
+                .collect(Collectors.toList());
     }
 
     /**
      * Equivalent to {@link #expand(Predicate)}, with the exception that leaf nodes are processed
-     * in a single thread, one at a time in the encountered order.
+     * one at a time, in the encountered order.
      * Consequently, the input <code>Predicate</code> is not restricted by behavioral constraints.
      * @param flagForRemoval
      */
     public void expandOrdered(Predicate<Stream<N>> flagForRemoval) {
         Objects.requireNonNull(flagForRemoval);
-        for (ListIterator<Tree<N>> treeIterator = trees.listIterator(); treeIterator.hasNext(); ) {
-            Stream.Builder<Node<N>> newLeaves = Stream.builder();
-            for (Node<N> leaf : treeIterator.next().leaves) {
-                if (!flagForRemoval.test(leaf.getReachable())) {
-                    buildChildren(leaf).forEachOrdered(newLeaves);
-                }
+        Stream.Builder<Node<N>> newLeaves = Stream.builder();
+        for (Node<N> leaf : leaves) {
+            if (!flagForRemoval.test(leaf.getReachable())) {
+                buildChildren(leaf).forEachOrdered(newLeaves);
             }
-            Tree<N> t = newLeaves.build().collect(Tree.toTree());
-            if (t.isEmpty()) treeIterator.remove();
-            else treeIterator.set(t);
         }
+        leaves = newLeaves.build().collect(Collectors.toList());
     }
 
     /**
@@ -189,48 +181,6 @@ public class LogicalSortedForest<N> {
                         (key, key2) -> { throw new IllegalStateException(String.format("duplicate key '%s'", key)); },
                         LinkedHashMap::new),
                 orderingMap -> new LogicalSortedForest<T>(ImmutableMap.copyOf(orderingMap)));
-    }
-
-    /**
-     * @param <N> the type of elements stored in nodes
-     */
-    private static class Tree<N> {
-        /**
-         * A tree, represented as a list of its leaf nodes.
-         */
-        private List<Node<N>> leaves;
-
-        private Tree(List<Node<N>> leaves) {
-            this.leaves = leaves;
-        }
-
-        public Stream<Node<N>> leaves() {
-            return leaves.stream();
-        }
-
-        public boolean isEmpty() {
-            return leaves.isEmpty();
-        }
-
-        /**
-         * Returns a new <code>Tree</code> rooted at the specified element.
-         * @param element
-         * @param <T> the type of elements stored in nodes
-         * @return
-         */
-        public static <T> Tree<T> ofRoot(T element) {
-            return new Tree<>(Collections.singletonList(Node.root(element)));
-        }
-
-        /**
-         * Returns a <code>Collector</code> that accumulates a sequence of leaf {@link Node}s
-         * into a new <code>Tree</code>.
-         * @param <T> the type of elements stored in nodes
-         * @return
-         */
-        public static <T> Collector<Node<T>, ?, Tree<T>> toTree() {
-            return Collectors.collectingAndThen(Collectors.toList(), Tree::new);
-        }
     }
 
     /**

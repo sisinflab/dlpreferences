@@ -1,5 +1,6 @@
 package it.poliba.enasca.ontocpnets;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Sets;
 import exception.PreferenceReasonerException;
@@ -13,7 +14,6 @@ import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.model.parameters.ChangeApplied;
 import org.semanticweb.owlapi.model.parameters.OntologyCopy;
-import org.semanticweb.owlapi.reasoner.InconsistentOntologyException;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 import java.io.IOException;
@@ -34,11 +34,6 @@ public class OntologicalCPNet extends CPNet {
     private DomainTable domainTable;
 
     /**
-     * An OWL reasoner that reasons over {@link #ontology}.
-     */
-    private OWLReasoner reasoner;
-
-    /**
      * The augmented ontology, constructed by adding preference domain entities to the base ontology.
      */
     OWLOntology ontology;
@@ -55,7 +50,6 @@ public class OntologicalCPNet extends CPNet {
         super(builder.baseCPNet);
         domainTable = builder.domainTable;
         ontology = builder.augmentedOntology;
-        reasoner = builder.reasoner;
         closure = new Lazy<>(this::computeClosure);
     }
 
@@ -128,7 +122,7 @@ public class OntologicalCPNet extends CPNet {
                 .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
         ClosureBuilder closureBuilder = new ClosureBuilder();
         while (!forest.isEmpty()) {
-            forest.expandOrdered(branch -> closureBuilder.accept(
+            forest.expand(branch -> closureBuilder.accept(
                     branch.collect(FeasibilityConstraint.toFeasibilityConstraint(
                             literal -> literal > 0,
                             literal -> domainTable.getDomainElement(literal)))));
@@ -183,35 +177,32 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Builds the ontological closure by accepting {@link FeasibilityConstraint}s sequentially
+     * Builds the ontological closure by accepting {@link FeasibilityConstraint}s
      * and checking whether they are eligible for inclusion in the closure.
      * A feasibility constraint is eligible if the axiom obtained from
-     * {@link FeasibilityConstraint#asAxiom(OWLDataFactory, UnaryOperator)}
-     * is entailed by {@link #ontology}.
+     * {@link FeasibilityConstraint#asAxiom(OWLDataFactory, UnaryOperator)} is entailed by the ontology.
+     *
+     * <p>This is a thread-safe implementation.
      */
     private class ClosureBuilder {
-        Stream.Builder<FeasibilityConstraint> closureBuilder;
-        OWLOntology closureAsOntology;
-        OWLReasoner closureReasoner;
+        private Set<FeasibilityConstraint> closure;
+        private OWLOntology closureAsOntology;
 
         public ClosureBuilder() {
-            closureBuilder = Stream.builder();
-            // Create an ontology that matches the ontological closure as it is built.
+            closure = Collections.synchronizedSet(new HashSet<>());
+            // Create a concurrent ontology that represents the ontological closure as it is built.
             try {
-                closureAsOntology = ontology.getOWLOntologyManager().createOntology();
+                closureAsOntology = OWLManager.createConcurrentOWLOntologyManager().createOntology();
             } catch (OWLOntologyCreationException e) {
                 throw new OWLRuntimeException("error while creating a temporary ontology for the closure axioms");
             }
-            // Create a non-buffering OWL reasoner that reasons over the ontological closure.
-            closureReasoner = new ReasonerFactory().createNonBufferingReasoner(closureAsOntology);
         }
 
         /**
          * Returns <code>true</code> if the specified <code>constraint</code> is eligible
          * for inclusion in the ontological closure.
          * A feasibility constraint is eligible if the axiom obtained from
-         * {@link FeasibilityConstraint#asAxiom(OWLDataFactory, UnaryOperator)}
-         * is entailed by {@link #ontology}.
+         * {@link FeasibilityConstraint#asAxiom(OWLDataFactory, UnaryOperator)} is entailed by the ontology.
          *
          * <p>If an eligible constraint is not redundant (that is, it is not already
          * entailed by the axioms collected in the closure so far), it is added to the closure.
@@ -219,25 +210,38 @@ public class OntologicalCPNet extends CPNet {
          * @return
          */
         public boolean accept(FeasibilityConstraint constraint) {
-            OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(
-                    ontology.getOWLOntologyManager().getOWLDataFactory(),
-                    domainValue -> domainTable.getIRIString(domainValue));
+            OWLSubClassOfAxiom branchAxiom =
+                    Objects.requireNonNull(constraint).asAxiom(
+                            ontology.getOWLOntologyManager().getOWLDataFactory(),
+                            domainValue -> domainTable.getIRIString(domainValue));
+            boolean result = false;
+            // Since the HermiT reasoner does not support concurrency, fresh instances must be created.
+            OWLReasoner closureReasoner = new ReasonerFactory().createReasoner(closureAsOntology);
             if (closureReasoner.isEntailed(branchAxiom)) {
-                return true;
-            }
-            if (reasoner.isEntailed(branchAxiom)) {
-                if (closureAsOntology.addAxiom(branchAxiom) != ChangeApplied.SUCCESSFULLY) {
-                    throw new OWLRuntimeException("error while adding closure axioms to the temporary ontology");
+                result = true;
+            } else {
+                OWLReasoner ontologyReasoner = new ReasonerFactory().createReasoner(ontology);
+                if (ontologyReasoner.isEntailed(branchAxiom)) {
+                    if (closureAsOntology.addAxiom(branchAxiom) != ChangeApplied.SUCCESSFULLY) {
+                        throw new OWLRuntimeException("error while adding closure axioms to the temporary ontology");
+                    }
+                    closure.add(constraint);
+                    result = true;
                 }
-                closureBuilder.add(constraint);
-                return true;
+                ontologyReasoner.dispose();
             }
-            return false;
+            closureReasoner.dispose();
+            return result;
         }
 
+        /**
+         * Returns an immutable <code>Set</code> containing the constraints collected so far.
+         * @return
+         */
         public Set<FeasibilityConstraint> build() {
-            return closureBuilder.build().collect(Collectors.toSet());
+            return ImmutableSet.copyOf(closure);
         }
+
     }
 
     /**
@@ -340,7 +344,6 @@ public class OntologicalCPNet extends CPNet {
         // required parameters for the OntologicalCPNet instance
         private CPNet baseCPNet;
         private OWLOntology augmentedOntology;
-        private OWLReasoner reasoner;
         private DomainTable domainTable;
         // build parameters
         private Set<String> domainValues;
@@ -354,7 +357,6 @@ public class OntologicalCPNet extends CPNet {
             domainTable = null;
             baseOntology = null;
             augmentedOntology = null;
-            reasoner = null;
         }
 
         /**
@@ -435,7 +437,7 @@ public class OntologicalCPNet extends CPNet {
             OWLDataFactory owlDataFactory = manager.getOWLDataFactory();
             // Copy the base ontology into a local manager and check for consistency.
             augmentedOntology = manager.copyOntology(baseOntology, OntologyCopy.SHALLOW);
-            reasoner = new ReasonerFactory().createReasoner(augmentedOntology);
+            OWLReasoner reasoner = new ReasonerFactory().createNonBufferingReasoner(augmentedOntology);
             if (!reasoner.isConsistent()) {
                 throw new IllegalStateException("inconsistent base ontology");
             }
@@ -474,11 +476,8 @@ public class OntologicalCPNet extends CPNet {
                     != ChangeApplied.SUCCESSFULLY) {
                 throw new OWLRuntimeException("error while applying changes to the new ontology");
             }
-            reasoner.flush();
-            try {
-                reasoner.precomputeInferences();
-            } catch (InconsistentOntologyException e) {
-                throw new IllegalStateException("inconsistent set of preferences", e);
+            if (!reasoner.isConsistent()) {
+                throw new IllegalStateException("inconsistent set of preferences");
             }
             // Build the OntologicalCPNet instance.
             return new OntologicalCPNet(this);
