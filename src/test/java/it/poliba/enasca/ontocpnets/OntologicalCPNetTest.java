@@ -2,7 +2,6 @@ package it.poliba.enasca.ontocpnets;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSetMultimap;
-import exception.PreferenceReasonerException;
 import it.poliba.enasca.ontocpnets.sat.SATSolverFactory;
 import it.poliba.enasca.ontocpnets.util.NuSMVRunnerTest;
 import model.Outcome;
@@ -15,6 +14,7 @@ import org.testng.annotations.Test;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.UnaryOperator;
@@ -31,7 +31,7 @@ public class OntologicalCPNetTest {
     private OWLOntology augmented;
     private Set<OptimalityConstraint> optimumSet;
     private Set<FeasibilityConstraint> closure;
-    private Set<Outcome> outcomes;
+    private Set<Map<String, String>> outcomesAsMaps;
 
     @Factory(dataProvider = "factoryProvider")
     public OntologicalCPNetTest(Path xmlPrefSpec, Path baseOntologyPath, Path augmentedOntologyPath,
@@ -61,15 +61,7 @@ public class OntologicalCPNetTest {
         this.augmented = augmentedOntology;
         this.optimumSet = optimum.collect(Collectors.toSet());
         this.closure = closure.collect(Collectors.toSet());
-        this.outcomes = outcomesAsMaps.map(assignments -> {
-            try {
-                Outcome o = new Outcome(assignments);
-                o.validateOutcome();
-                return o;
-            } catch (PreferenceReasonerException e) {
-                throw new RuntimeException(e);
-            }
-        }).collect(Collectors.toSet());
+        this.outcomesAsMaps = outcomesAsMaps.collect(Collectors.toSet());
     }
 
     @DataProvider
@@ -194,31 +186,34 @@ public class OntologicalCPNetTest {
 
     @Test
     public void testPreferenceVariables() throws Exception {
-        Assert.assertEquals(cpnet.getPreferenceGraph().domainMap(), preferenceVariables.asMap());
+        Map<String, Collection<String>> domainMap = preferenceVariables.asMap();
+        Map<String, Set<String>> cpnetDomainMap = cpnet.getPreferenceGraph().domainMap();
+        Assert.assertEquals(cpnetDomainMap, domainMap,
+                Utils.reportSetDifference(cpnetDomainMap.entrySet(), domainMap.entrySet()));
     }
 
     @Test
     public void testComputeOptimum() throws Exception {
-        Assert.assertEquals(cpnet.getPreferenceGraph().getOptimumSet(), optimumSet);
+        Set<OptimalityConstraint> cpnetOptimum = cpnet.getPreferenceGraph().getOptimumSet();
+        Assert.assertEquals(cpnetOptimum, optimumSet,
+                Utils.reportSetDifference(cpnetOptimum, optimumSet));
     }
 
     @Test
     public void testComputeClosure() throws Exception {
-        Assert.assertEquals(cpnet.getClosure(), closure);
+        Set<FeasibilityConstraint> cpnetClosure = cpnet.getClosure();
+        Assert.assertEquals(cpnetClosure, closure,
+                Utils.reportSetDifference(cpnetClosure, closure));
     }
 
     @Test
     public void testHardPareto() throws Exception {
-        // Since the class Outcome does not implement toString(), an explicit conversion is needed.
-        Set<Map<String, String>> hardParetoOutcomes = cpnet.hardPareto(SATSolverFactory.defaultSolver())
-                .stream()
-                .map(Outcome::getOutcomeAsValuationMap)
-                .collect(Collectors.toSet());
-        Set<Map<String, String>> expectedOutcomes = this.outcomes
-                .stream()
-                .map(Outcome::getOutcomeAsValuationMap)
-                .collect(Collectors.toSet());
-        Assert.assertEquals(hardParetoOutcomes, expectedOutcomes);
+        Set<Map<String, String>> hardParetoOutcomes =
+                cpnet.hardPareto(SATSolverFactory.defaultSolver()).stream()
+                        .map(Outcome::getOutcomeAsValuationMap)
+                        .collect(Collectors.toSet());
+        Assert.assertEquals(hardParetoOutcomes, outcomesAsMaps,
+                Utils.reportSetDifference(hardParetoOutcomes, outcomesAsMaps));
     }
 
     /**
