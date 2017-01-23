@@ -212,7 +212,7 @@ public class OntologicalCPNet extends CPNet {
         public boolean accept(FeasibilityConstraint constraint) {
             OWLSubClassOfAxiom branchAxiom =
                     Objects.requireNonNull(constraint).asAxiom(
-                            ontology.getOWLOntologyManager().getOWLDataFactory(),
+                            closureAsOntology.getOWLOntologyManager().getOWLDataFactory(),
                             domainValue -> domainTable.getIRIString(domainValue));
             boolean result = false;
             // Since the HermiT reasoner does not support concurrency, fresh instances must be created.
