@@ -1,5 +1,6 @@
 package it.poliba.enasca.ontocpnets.sat;
 
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -7,9 +8,8 @@ import java.util.stream.Stream;
  */
 public abstract class SATSolver {
     /**
-     * The number of variables for problems handled by this <code>SATSolver</code>.
-     * If <code>maxLiteral &lt;= 0</code>, the number of variables is computed
-     * each time {@link #solve(BooleanFormula)} is invoked.
+     * If <code>&gt; 0</code>, this value overrides the number of variables
+     * for problems handled by this <code>SATSolver</code>.
      */
     protected int maxLiteral;
 
@@ -19,14 +19,17 @@ public abstract class SATSolver {
 
     /**
      * Sets the number of variables for problems handled by this <code>SATSolver</code>.
-     * If <code>maxLiteral &lt;= 0</code>, the number of variables is computed
-     * each time {@link #solve(BooleanFormula)} is invoked.
      */
     public void setMaxLiteral(int maxLiteral) {
         this.maxLiteral = maxLiteral;
     }
 
-    protected abstract Stream<DIMACSLiterals> solve(BooleanFormula problem, int maxLiteral);
+    /**
+     * Returns <code>true</code> if models exist for the input problem.
+     * @param problem
+     * @return
+     */
+    public abstract boolean isSatisfiable(BooleanFormula problem);
 
     /**
      * Solves a boolean satisfiability problem expressed in DIMACS CNF format.
@@ -35,19 +38,26 @@ public abstract class SATSolver {
      * the total number of variables in the boolean problem, otherwise the actual number
      * of variables in <code>problem</code> will be used.
      * @param problem
-     * @return a stream of satisfiable models of the problem.
-     * A model is a set of literals ranging from 1 to <code>maxLiteral</code>.
+     * @return the satisfiable models for the input problem
      */
-    public Stream<DIMACSLiterals> solve(BooleanFormula problem) {
-        if (maxLiteral > 0) {
-            return solve(problem, maxLiteral);
-        }
-        int tempMaxLiteral = problem.clauses.stream()
-                .flatMapToInt(DIMACSLiterals::stream)
-                .max().orElse(0);
-        if (tempMaxLiteral > 0) {
-            return solve(problem, tempMaxLiteral);
-        }
-        return Stream.empty();
+    public abstract Stream<DIMACSLiterals> solve(BooleanFormula problem);
+
+    /**
+     * Returns <code>true</code> if <code>formula</code> implies <code>clause</code>.
+     *
+     * <p>This is equivalent to
+     * <pre>{@code
+     * BooleanFormula testFormula = BooleanFormula.copyOf(formula);
+     * testFormula.addNegatedClause(clause);
+     * return !isSatisfiable(testFormula);
+     * }</pre>
+     * @param formula
+     * @param clause
+     * @return
+     */
+    public boolean implies(BooleanFormula formula, IntStream clause) {
+        BooleanFormula testFormula = BooleanFormula.copyOf(formula);
+        testFormula.addNegatedClause(clause);
+        return !isSatisfiable(testFormula);
     }
 }

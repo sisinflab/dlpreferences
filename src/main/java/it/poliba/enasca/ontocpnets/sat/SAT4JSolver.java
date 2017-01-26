@@ -8,6 +8,7 @@ import org.sat4j.specs.TimeoutException;
 import org.sat4j.tools.ModelIterator;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -19,36 +20,77 @@ public class SAT4JSolver extends SATSolver {
     }
 
     /**
+     * Creates a {@link ModelIterator} object ready to find satisfiable models
+     * for the specified problem.
+     * If <code>problem</code> is trivially unsatisfiable, an empty <code>Optional</code> is returned.
      * @param problem
-     * @param maxLiteral
-     * @return
-     * @throws SATRuntimeException if the solver behaves unexpectedly while computing the satisfiable models
+     * @return a solver for the specified problem, or an empty <code>Optional</code>
+     * if the problem is trivially unsatisfiable.
      */
-    @Override
-    protected Stream<DIMACSLiterals> solve(BooleanFormula problem, int maxLiteral) {
+    private Optional<ModelIterator> populate(BooleanFormula problem) {
         Objects.requireNonNull(problem);
-        // Configure the SAT4J solver.
         ModelIterator solver = new ModelIterator(SolverFactory.newDefault());
-        solver.newVar(maxLiteral);
+        if (maxLiteral > 0) {
+            solver.newVar(maxLiteral);
+        }
         solver.setExpectedNumberOfClauses(problem.size());
-        // Add clauses.
         try {
             for (DIMACSLiterals clause : problem.clauses) {
                 solver.addClause(new VecInt(clause.literals));
             }
         } catch (ContradictionException e) {
-            // the problem is unsatisfiable
-            return Stream.empty();
+            solver = null;
         }
-        // Find satisfiable models.
-        Stream.Builder<DIMACSLiterals> models = Stream.builder();
+        return Optional.ofNullable(solver);
+    }
+
+    /**
+     * Finds satisfiable models using the specified <code>ModelIterator</code>.
+     * If the problem is unsatisfiable, an empty <code>Stream</code> is returned.
+     * @param solver
+     * @return
+     * @throws SATRuntimeException if the solver behaves unexpectedly while computing satisfiable models
+     */
+    private static Stream<DIMACSLiterals> models(ModelIterator solver) {
+        Objects.requireNonNull(solver);
+        Stream.Builder<DIMACSLiterals> builder = Stream.builder();
         try {
             while (solver.isSatisfiable()) {
-                models.accept(new DIMACSLiterals(solver.model()));
+                builder.accept(new DIMACSLiterals(solver.model()));
             }
         } catch (TimeoutException e) {
             throw new SATRuntimeException(e);
         }
-        return models.build();
+        return builder.build();
+    }
+
+    /**
+     * @param problem
+     * @return
+     * @throws SATRuntimeException if the solver behaves unexpectedly while computing satisfiable models
+     */
+    @Override
+    public boolean isSatisfiable(BooleanFormula problem) {
+        Optional<ModelIterator> modelIterator = populate(problem);
+        if (!modelIterator.isPresent()) return false;
+        boolean result;
+        try {
+            result = modelIterator.get().isSatisfiable();
+        } catch (TimeoutException e) {
+            throw new SATRuntimeException(e);
+        }
+        return result;
+    }
+
+    /**
+     * @param problem
+     * @return
+     * @throws SATRuntimeException if the solver behaves unexpectedly while computing satisfiable models
+     */
+    @Override
+    public Stream<DIMACSLiterals> solve(BooleanFormula problem) {
+        Optional<ModelIterator> modelIterator = populate(problem);
+        if (!modelIterator.isPresent()) return Stream.empty();
+        return models(modelIterator.get());
     }
 }

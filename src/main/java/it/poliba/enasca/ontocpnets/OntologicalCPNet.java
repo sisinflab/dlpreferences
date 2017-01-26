@@ -72,14 +72,14 @@ public class OntologicalCPNet extends CPNet {
     public Set<Outcome> hardPareto() throws IOException {
         Set<DIMACSLiterals> undominatedModels, feasibleModels, optimalModels;
         // Solve the optimum set and the ontological closure as boolean problems.
-        undominatedModels = solveConstraints(graph.getOptimumSet().parallelStream())
+        undominatedModels = solveConstraints(graph.getOptimumSet().stream())
                 .collect(Collectors.toSet());
-        feasibleModels = solveConstraints(getClosure().parallelStream())
+        feasibleModels = solveConstraints(getClosure().stream())
                 .collect(Collectors.toSet());
         optimalModels = solveConstraints(
                 Stream.concat(
-                        graph.getOptimumSet().parallelStream(),
-                        getClosure().parallelStream()))
+                        graph.getOptimumSet().stream(),
+                        getClosure().stream()))
                 .collect(Collectors.toSet());
         Set<Outcome> feasibleOutcomes = feasibleModels.stream()
                 .map(this::interpretModel)
@@ -138,10 +138,10 @@ public class OntologicalCPNet extends CPNet {
      * @return
      */
     private Stream<DIMACSLiterals> solveConstraints(Stream<? extends Constraint> constraints) {
-        ConcurrentBooleanFormula formula = constraints
+        BooleanFormula formula = constraints
                 .map(constraint -> constraint.asClause(domainTable::getDimacsLiteral))
                 .map(DIMACSLiterals::new)
-                .collect(ConcurrentBooleanFormula.toConcurrentFormula());
+                .collect(ConcurrentBooleanFormula.toFormula());
         return solver.solve(formula);
     }
 
@@ -214,25 +214,21 @@ public class OntologicalCPNet extends CPNet {
             int[] branchClause = Objects.requireNonNull(constraint)
                     .asClause(domainTable::getDimacsLiteral)
                     .toArray();
-            BooleanFormula problem = BooleanFormula.copyOf(closureAsFormula);
-            problem.addNegatedClause(Arrays.stream(branchClause));
-            Stream<DIMACSLiterals> models = solver.solve(problem);
-            if (!models.findAny().isPresent()) {
-                // the closure entails the current branch clause
+            // Check whether the current branch clause is entailed by the closure.
+            if (solver.implies(closureAsFormula, Arrays.stream(branchClause))) {
                 return true;
             }
-            // Since the HermiT reasoner does not support concurrency, fresh instances must be created.
+            // Since the HermiT reasoner does not support concurrency, a fresh instance must be created.
             OWLReasoner ontologyReasoner = new ReasonerFactory().createReasoner(ontology);
+            // Check whether the current branch axiom is entailed by the ontology.
             OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(owlDataFactory, domainTable::getIRIString);
-            boolean result = false;
-            if (ontologyReasoner.isEntailed(branchAxiom)) {
-                // the ontology entails the current branch axiom
+            boolean isEntailed = ontologyReasoner.isEntailed(branchAxiom);
+            ontologyReasoner.dispose();
+            if (isEntailed) {
                 closure.add(constraint);
                 closureAsFormula.addClause(Arrays.stream(branchClause));
-                result = true;
             }
-            ontologyReasoner.dispose();
-            return result;
+            return isEntailed;
         }
 
         /**
