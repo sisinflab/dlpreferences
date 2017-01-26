@@ -4,8 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Sets;
 import exception.PreferenceReasonerException;
-import it.poliba.enasca.ontocpnets.except.SATInvalidException;
-import it.poliba.enasca.ontocpnets.sat.SATSolver;
+import it.poliba.enasca.ontocpnets.sat.*;
 import it.poliba.enasca.ontocpnets.util.Lazy;
 import it.poliba.enasca.ontocpnets.util.LogicalSortedForest;
 import model.Outcome;
@@ -39,6 +38,13 @@ public class OntologicalCPNet extends CPNet {
     OWLOntology ontology;
 
     /**
+     * The <code>SATSolver</code> implementation used internally to find satisfiable models
+     * for collections of ontological constraints, such as {@link PreferenceGraph#getOptimumSet()}
+     * and {@link #getClosure()}.
+     */
+    private SATSolver solver;
+
+    /**
      * The ontological closure, wrapped in a lazy initializer.
      * The inner integers represent domain values, in accordance with the mappings
      * specified in {@link DomainTable#table}. A negative integer indicates
@@ -50,6 +56,7 @@ public class OntologicalCPNet extends CPNet {
         super(builder.baseCPNet);
         domainTable = builder.domainTable;
         ontology = builder.augmentedOntology;
+        solver = builder.solver;
         closure = new Lazy<>(this::computeClosure);
     }
 
@@ -59,32 +66,26 @@ public class OntologicalCPNet extends CPNet {
 
     /**
      * Computes the optimal outcomes using the ontological variant of the HARD-PARETO algorithm.
-     * @param solver
      * @return
      * @throws IOException if an internal call to {@link #dominates(Outcome, Outcome)} results in an <code>IOException</code>
      */
-    public Set<Outcome> hardPareto(SATSolver solver) throws IOException {
-        int maxLiteral = domainTable.getDimacsLiterals().size();
-        Set<Set<Integer>> undominatedModels, feasibleModels, optimalModels;
+    public Set<Outcome> hardPareto() throws IOException {
+        Set<DIMACSLiterals> undominatedModels, feasibleModels, optimalModels;
         // Solve the optimum set and the ontological closure as boolean problems.
-        try {
-            undominatedModels =
-                    solver.solveDimacsCNF(toDimacsCNF(graph.getOptimumSet()), maxLiteral)
-                            .collect(Collectors.toSet());
-            feasibleModels =
-                    solver.solveDimacsCNF(toDimacsCNF(getClosure()), maxLiteral)
-                            .collect(Collectors.toSet());
-            optimalModels =
-                    solver.solveDimacsCNF(toDimacsCNF(Sets.union(graph.getOptimumSet(), getClosure())), maxLiteral)
-                            .collect(Collectors.toSet());
-        } catch (SATInvalidException e) {
-            throw new IllegalStateException("invalid boolean clause", e);
-        }
+        undominatedModels = solveConstraints(graph.getOptimumSet().parallelStream())
+                .collect(Collectors.toSet());
+        feasibleModels = solveConstraints(getClosure().parallelStream())
+                .collect(Collectors.toSet());
+        optimalModels = solveConstraints(
+                Stream.concat(
+                        graph.getOptimumSet().parallelStream(),
+                        getClosure().parallelStream()))
+                .collect(Collectors.toSet());
         Set<Outcome> feasibleOutcomes = feasibleModels.stream()
-                .map(this::interpretDimacs)
+                .map(this::interpretModel)
                 .collect(Collectors.toSet());
         Set<Outcome> optimalOutcomes = optimalModels.stream()
-                .map(this::interpretDimacs)
+                .map(this::interpretModel)
                 .collect(Collectors.toSet());
         // Find the set of optimal (feasible + undominated) outcomes.
         if (optimalModels.equals(feasibleModels) ||
@@ -125,20 +126,23 @@ public class OntologicalCPNet extends CPNet {
             forest.expand(branch -> closureBuilder.accept(
                     branch.collect(FeasibilityConstraint.toFeasibilityConstraint(
                             literal -> literal > 0,
-                            literal -> domainTable.getDomainElement(literal)))));
+                            domainTable::getDomainElement))));
         }
         return closureBuilder.build();
     }
 
     /**
-     * Converts an ontological problem into DIMACS CNF clauses.
-     * @param problem
+     * Translates a set of constraints into a boolean satisfiability problem
+     * and finds satisfiable models.
+     * @param constraints
      * @return
      */
-    private Stream<Set<Integer>> toDimacsCNF(Set<? extends Constraint> problem) {
-        return problem.stream()
-                .map(constraint -> constraint.asClause(
-                        domainValue -> domainTable.getDimacsLiteral(domainValue)));
+    private Stream<DIMACSLiterals> solveConstraints(Stream<? extends Constraint> constraints) {
+        ConcurrentBooleanFormula formula = constraints
+                .map(constraint -> constraint.asClause(domainTable::getDimacsLiteral))
+                .map(DIMACSLiterals::new)
+                .collect(ConcurrentBooleanFormula.toConcurrentFormula());
+        return solver.solve(formula);
     }
 
     /**
@@ -146,10 +150,10 @@ public class OntologicalCPNet extends CPNet {
      * @param model
      * @return
      */
-    private Outcome interpretDimacs(Set<Integer> model) {
+    private Outcome interpretModel(DIMACSLiterals model) {
         Set<String> domainValuesInModel = model.stream()
                 .filter(dimacsLiteral -> dimacsLiteral > 0)
-                .map(dimacsLiteral -> domainTable.getDomainElement(dimacsLiteral))
+                .mapToObj(domainTable::getDomainElement)
                 .collect(Collectors.toSet());
         Map<String, String> assignments = graph.domainMap().entrySet().stream()
                 .collect(Collectors.toMap(
@@ -180,29 +184,26 @@ public class OntologicalCPNet extends CPNet {
      * Builds the ontological closure by accepting {@link FeasibilityConstraint}s
      * and checking whether they are eligible for inclusion in the closure.
      * A feasibility constraint is eligible if the axiom obtained from
-     * {@link FeasibilityConstraint#asAxiom(OWLDataFactory, UnaryOperator)} is entailed by the ontology.
+     * {@link Constraint#asAxiom(OWLDataFactory, UnaryOperator)} is entailed by the ontology.
      *
      * <p>This is a thread-safe implementation.
      */
     private class ClosureBuilder {
         private Set<FeasibilityConstraint> closure;
-        private OWLOntology closureAsOntology;
+        private ConcurrentBooleanFormula closureAsFormula;
+        private OWLDataFactory owlDataFactory;
 
         public ClosureBuilder() {
             closure = Collections.synchronizedSet(new HashSet<>());
-            // Create a concurrent ontology that represents the ontological closure as it is built.
-            try {
-                closureAsOntology = OWLManager.createConcurrentOWLOntologyManager().createOntology();
-            } catch (OWLOntologyCreationException e) {
-                throw new OWLRuntimeException("error while creating a temporary ontology for the closure axioms");
-            }
+            closureAsFormula = new ConcurrentBooleanFormula();
+            owlDataFactory = OWLManager.createConcurrentOWLOntologyManager().getOWLDataFactory();
         }
 
         /**
          * Returns <code>true</code> if the specified <code>constraint</code> is eligible
          * for inclusion in the ontological closure.
          * A feasibility constraint is eligible if the axiom obtained from
-         * {@link FeasibilityConstraint#asAxiom(OWLDataFactory, UnaryOperator)} is entailed by the ontology.
+         * {@link Constraint#asAxiom(OWLDataFactory, UnaryOperator)} is entailed by the ontology.
          *
          * <p>If an eligible constraint is not redundant (that is, it is not already
          * entailed by the axioms collected in the closure so far), it is added to the closure.
@@ -210,27 +211,27 @@ public class OntologicalCPNet extends CPNet {
          * @return
          */
         public boolean accept(FeasibilityConstraint constraint) {
-            OWLSubClassOfAxiom branchAxiom =
-                    Objects.requireNonNull(constraint).asAxiom(
-                            closureAsOntology.getOWLOntologyManager().getOWLDataFactory(),
-                            domainValue -> domainTable.getIRIString(domainValue));
-            boolean result = false;
-            // Since the HermiT reasoner does not support concurrency, fresh instances must be created.
-            OWLReasoner closureReasoner = new ReasonerFactory().createReasoner(closureAsOntology);
-            if (closureReasoner.isEntailed(branchAxiom)) {
-                result = true;
-            } else {
-                OWLReasoner ontologyReasoner = new ReasonerFactory().createReasoner(ontology);
-                if (ontologyReasoner.isEntailed(branchAxiom)) {
-                    if (closureAsOntology.addAxiom(branchAxiom) != ChangeApplied.SUCCESSFULLY) {
-                        throw new OWLRuntimeException("error while adding closure axioms to the temporary ontology");
-                    }
-                    closure.add(constraint);
-                    result = true;
-                }
-                ontologyReasoner.dispose();
+            int[] branchClause = Objects.requireNonNull(constraint)
+                    .asClause(domainTable::getDimacsLiteral)
+                    .toArray();
+            BooleanFormula problem = BooleanFormula.copyOf(closureAsFormula);
+            problem.addNegatedClause(Arrays.stream(branchClause));
+            Stream<DIMACSLiterals> models = solver.solve(problem);
+            if (!models.findAny().isPresent()) {
+                // the closure entails the current branch clause
+                return true;
             }
-            closureReasoner.dispose();
+            // Since the HermiT reasoner does not support concurrency, fresh instances must be created.
+            OWLReasoner ontologyReasoner = new ReasonerFactory().createReasoner(ontology);
+            OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(owlDataFactory, domainTable::getIRIString);
+            boolean result = false;
+            if (ontologyReasoner.isEntailed(branchAxiom)) {
+                // the ontology entails the current branch axiom
+                closure.add(constraint);
+                closureAsFormula.addClause(Arrays.stream(branchClause));
+                result = true;
+            }
+            ontologyReasoner.dispose();
             return result;
         }
 
@@ -245,7 +246,8 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Stores equivalent representations of the preference domain entities that were added to the base ontology.
+     * Stores equivalent representations of the preference domain entities that were
+     * added to the base ontology.
      */
     private static class DomainTable {
 
@@ -345,6 +347,8 @@ public class OntologicalCPNet extends CPNet {
         private CPNet baseCPNet;
         private OWLOntology augmentedOntology;
         private DomainTable domainTable;
+        // optional parameters
+        private SATSolver solver;
         // build parameters
         private Set<String> domainValues;
         private OWLOntology baseOntology;
@@ -355,6 +359,7 @@ public class OntologicalCPNet extends CPNet {
             definitions = new HashMap<>();
             domainValues = this.baseCPNet.graph.domainValues().collect(Collectors.toSet());
             domainTable = null;
+            solver = null;
             baseOntology = null;
             augmentedOntology = null;
         }
@@ -372,6 +377,20 @@ public class OntologicalCPNet extends CPNet {
         public Builder withOntology(OWLOntology baseOntology) {
             if (this.baseOntology != null) throw new IllegalStateException();
             this.baseOntology = Objects.requireNonNull(baseOntology);
+            return this;
+        }
+
+        /**
+         * Specifies a <code>SATSolver</code> implementation for the {@link OntologicalCPNet} being built.
+         *
+         * <p>If {@link #build()} is invoked without setting a <code>SATSolver</code>,
+         * the default implementation will be used.
+         * @param solver
+         * @return
+         */
+        public Builder withSATSolver(SATSolver solver) {
+            if (this.solver != null) throw new IllegalStateException();
+            this.solver = Objects.requireNonNull(solver);
             return this;
         }
 
@@ -426,16 +445,16 @@ public class OntologicalCPNet extends CPNet {
          * @throws IllegalStateException if the required parameters were not set properly
          */
         public OntologicalCPNet build() throws OWLOntologyCreationException {
-            // Check preconditions.
+            // Check required parameters.
             if (baseOntology == null) {
                 throw new IllegalStateException("base ontology not set");
             }
             if (!domainValues.equals(definitions.keySet())) {
                 throw new IllegalStateException("missing OWL definition for some domain values");
             }
+            // Copy the base ontology into a local manager and check for consistency.
             OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
             OWLDataFactory owlDataFactory = manager.getOWLDataFactory();
-            // Copy the base ontology into a local manager and check for consistency.
             augmentedOntology = manager.copyOntology(baseOntology, OntologyCopy.SHALLOW);
             OWLReasoner reasoner = new ReasonerFactory().createNonBufferingReasoner(augmentedOntology);
             if (!reasoner.isConsistent()) {
@@ -455,6 +474,11 @@ public class OntologicalCPNet extends CPNet {
                             .filter(iriString -> !existingIRIStrings.contains(iriString))
                             .findFirst().orElseThrow(() -> new IllegalStateException(
                                     String.format("Unable to generate a unique IRI for domain value '%s'", domainValue))));
+            // Configure the SAT solver.
+            if (solver == null) {
+                solver = SATSolverFactory.defaultSolver();
+            }
+            solver.setMaxLiteral(domainTable.getDimacsLiterals().size());
             // Build a mapping between domain values and their OWL representations.
             Map<String, OWLClass> owlDomainValues = domainValues.stream()
                     .collect(Collectors.toMap(

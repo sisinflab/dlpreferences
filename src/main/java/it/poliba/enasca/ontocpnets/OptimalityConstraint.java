@@ -1,27 +1,24 @@
 package it.poliba.enasca.ontocpnets;
 
 import it.poliba.enasca.ontocpnets.util.StreamBasedBuilder;
-import org.semanticweb.owlapi.model.OWLClassExpression;
-import org.semanticweb.owlapi.model.OWLDataFactory;
-import org.semanticweb.owlapi.model.OWLSubClassOfAxiom;
 
+import java.util.Map;
 import java.util.Set;
-import java.util.function.ToIntFunction;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
  * An element of the optimum set.
  */
-public class OptimalityConstraint implements Constraint {
+public class OptimalityConstraint extends Constraint {
     /**
-     * Encodes the elements on the left side of the OWL axiom returned by {@link Constraint#asAxiom(OWLDataFactory, UnaryOperator)}.
+     * Encodes the conjunction of elements on the left side of the implication.
      */
     Set<String> condition;
 
     /**
-     * Encodes the elements on the right side of the OWL axiom returned by {@link Constraint#asAxiom(OWLDataFactory, UnaryOperator)}.
+     * Encodes the disjunction of elements on the right side of the implication.
      */
     Set<String> clause;
 
@@ -51,37 +48,16 @@ public class OptimalityConstraint implements Constraint {
         return 31 * result + clause.hashCode();
     }
 
-    /**
-     * Converts this ontological constraint into an axiom of the form:
-     * <pre>{@code SubClassOf(ObjectIntersectionOf(A, B, ...), ObjectUnionOf(X, Y, ...))}</pre>
-     * If this class was constructed with an empty <em>condition set</em>, the left side of the
-     * <em>SubClassOf</em> relationship is replaced with <i>owl:Thing</i>.
-     * @param df the <code>OWLDataFactory</code> instance that will be used to create the axiom
-     * @param toIRIString a mapping function between elements stored in this {@link OptimalityConstraint} and IRI strings
-     * @return
-     */
     @Override
-    public OWLSubClassOfAxiom asAxiom(OWLDataFactory df, UnaryOperator<String> toIRIString) {
-        OWLClassExpression leftSide = condition.isEmpty() ?
-                df.getOWLThing() :
-                df.getOWLObjectIntersectionOf(
-                        condition.stream()
-                                .map(name -> df.getOWLClass(toIRIString.apply(name))));
-        OWLClassExpression rightSide = df.getOWLObjectUnionOf(
-                clause.stream()
-                        .map(name -> df.getOWLClass(toIRIString.apply(name))));
-        return df.getOWLSubClassOfAxiom(leftSide, rightSide);
+    public Map<String, Boolean> left() {
+        return condition.stream()
+                .collect(Collectors.toMap(Function.identity(), elem -> true));
     }
 
     @Override
-    public Set<Integer> asClause(ToIntFunction<String> toPositiveLiteral) {
-        // De Morgan's law: NOT(a AND b) is equivalent to (NOT(a) OR NOT(b))
-        Stream<Integer> leftSide = condition.stream()
-                .map(elementName -> -toPositiveLiteral.applyAsInt(elementName));
-        Stream<Integer> rightSide = clause.stream()
-                .map(toPositiveLiteral::applyAsInt);
-        return Stream.concat(leftSide, rightSide)
-                .collect(Collectors.toSet());
+    public Map<String, Boolean> right() {
+        return clause.stream()
+                .collect(Collectors.toMap(Function.identity(), elem -> true));
     }
 
     /**
@@ -90,18 +66,6 @@ public class OptimalityConstraint implements Constraint {
      */
     public static Builder builder() {
         return new Builder();
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("{ ");
-        if (!condition.isEmpty()) {
-            sb.append(String.join(" ∧ ", condition));
-            sb.append(" -> ");
-        }
-        sb.append(String.join(" ∨ ", clause));
-        sb.append(" }");
-        return sb.toString();
     }
 
     public static class Builder extends StreamBasedBuilder<OptimalityConstraint> {

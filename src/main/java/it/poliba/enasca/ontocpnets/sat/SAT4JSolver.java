@@ -1,59 +1,54 @@
 package it.poliba.enasca.ontocpnets.sat;
 
-import com.google.common.primitives.Ints;
-import it.poliba.enasca.ontocpnets.except.SATInvalidException;
 import it.poliba.enasca.ontocpnets.except.SATRuntimeException;
 import org.sat4j.core.VecInt;
 import org.sat4j.minisat.SolverFactory;
 import org.sat4j.specs.ContradictionException;
-import org.sat4j.specs.IVecInt;
 import org.sat4j.specs.TimeoutException;
 import org.sat4j.tools.ModelIterator;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 /**
  * A boolean SAT solver that uses the SAT4J library.
  */
-public class SAT4JSolver implements SATSolver {
+public class SAT4JSolver extends SATSolver {
+    public SAT4JSolver() {
+        super();
+    }
+
     /**
-     * @param clauses
-     * @param maxLiteral the number of variables in the problem.
+     * @param problem
+     * @param maxLiteral
      * @return
-     * @throws SATInvalidException
      * @throws SATRuntimeException if the solver behaves unexpectedly while computing the satisfiable models
      */
     @Override
-    public Stream<Set<Integer>> solveDimacsCNF(Stream<Set<Integer>> clauses, int maxLiteral)
-            throws SATInvalidException {
-        List<Set<Integer>> clauseList = clauses.collect(Collectors.toList());
+    protected Stream<DIMACSLiterals> solve(BooleanFormula problem, int maxLiteral) {
+        Objects.requireNonNull(problem);
         // Configure the SAT4J solver.
         ModelIterator solver = new ModelIterator(SolverFactory.newDefault());
         solver.newVar(maxLiteral);
-        solver.setExpectedNumberOfClauses(clauseList.size());
+        solver.setExpectedNumberOfClauses(problem.size());
         // Add clauses.
-        for (Set<Integer> clause : clauseList) {
-            IVecInt v = new VecInt(Ints.toArray(clause));
-            try {
-                solver.addClause(v);
-            } catch (ContradictionException e) {
-                throw new SATInvalidException(e);
+        try {
+            for (DIMACSLiterals clause : problem.clauses) {
+                solver.addClause(new VecInt(clause.literals));
             }
+        } catch (ContradictionException e) {
+            // the problem is unsatisfiable
+            return Stream.empty();
         }
-        // Retrieve the satisfiable models.
-        Stream.Builder<Set<Integer>> modelBuilder = Stream.builder();
+        // Find satisfiable models.
+        Stream.Builder<DIMACSLiterals> models = Stream.builder();
         try {
             while (solver.isSatisfiable()) {
-                int[] model = solver.model();
-                modelBuilder.accept(Arrays.stream(model).boxed().collect(Collectors.toSet()));
+                models.accept(new DIMACSLiterals(solver.model()));
             }
         } catch (TimeoutException e) {
             throw new SATRuntimeException(e);
         }
-        return modelBuilder.build();
+        return models.build();
     }
 }

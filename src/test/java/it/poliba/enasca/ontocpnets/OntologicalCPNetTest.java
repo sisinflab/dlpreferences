@@ -2,7 +2,6 @@ package it.poliba.enasca.ontocpnets;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSetMultimap;
-import it.poliba.enasca.ontocpnets.sat.SATSolverFactory;
 import it.poliba.enasca.ontocpnets.util.NuSMVRunnerTest;
 import model.Outcome;
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -51,12 +50,12 @@ public class OntologicalCPNetTest {
                 collectOntologicalPreferences(augmentedOntology, preferenceVariables.values().stream());
         // Build the current OntologicalCPNet instance.
         CPNet baseCPNet = new CPNet(xmlPrefSpec, Paths.get(NuSMVRunnerTest.NUSMV_EXECUTABLE.toURI()));
-        OntologicalCPNet.Builder builder = OntologicalCPNet.builder(baseCPNet);
-        builder.withOntology(baseOntology);
+        OntologicalCPNet.Builder cpnetBuilder = OntologicalCPNet.builder(baseCPNet);
+        cpnetBuilder.withOntology(baseOntology);
         for (Map.Entry<String, OWLClassExpression> preferenceEntry : preferences.entrySet()) {
-            builder.addPreferenceDefinition(preferenceEntry.getKey(), preferenceEntry.getValue());
+            cpnetBuilder.addPreferenceDefinition(preferenceEntry.getKey(), preferenceEntry.getValue());
         }
-        this.cpnet = builder.build();
+        this.cpnet = cpnetBuilder.build();
         this.preferenceVariables = preferenceVariables;
         this.augmented = augmentedOntology;
         this.optimumSet = optimum.collect(Collectors.toSet());
@@ -209,7 +208,7 @@ public class OntologicalCPNetTest {
     @Test
     public void testHardPareto() throws Exception {
         Set<Map<String, String>> hardParetoOutcomes =
-                cpnet.hardPareto(SATSolverFactory.defaultSolver()).stream()
+                cpnet.hardPareto().stream()
                         .map(Outcome::getOutcomeAsValuationMap)
                         .collect(Collectors.toSet());
         Assert.assertEquals(hardParetoOutcomes, outcomesAsMaps,

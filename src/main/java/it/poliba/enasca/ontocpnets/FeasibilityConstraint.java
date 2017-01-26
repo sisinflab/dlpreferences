@@ -1,17 +1,14 @@
 package it.poliba.enasca.ontocpnets;
 
+import com.google.common.collect.ImmutableMap;
 import it.poliba.enasca.ontocpnets.util.StreamBasedBuilder;
-import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLDataFactory;
-import org.semanticweb.owlapi.model.OWLObjectUnionOf;
-import org.semanticweb.owlapi.model.OWLSubClassOfAxiom;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.ToIntFunction;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
@@ -20,7 +17,7 @@ import java.util.stream.Stream;
 /**
  * An element of the ontological closure.
  */
-public class FeasibilityConstraint implements Constraint {
+public class FeasibilityConstraint extends Constraint {
     /**
      * A union of elements with their respective logical state.
      * A boolean value of <code>false</code> indicates a logical complement.
@@ -48,51 +45,32 @@ public class FeasibilityConstraint implements Constraint {
         return clause.hashCode();
     }
 
-    /**
-     * Converts this ontological constraint into an axiom of the form:
-     * <pre>{@code SubClassOf(owl:Thing, ObjectUnionOf(X, Y, ...))}</pre>
-     * @param df the <code>OWLDataFactory</code> instance that will be used to create the axiom
-     * @param toIRIString a mapping function between elements stored in this {@link FeasibilityConstraint} and IRI strings
-     * @return
-     */
     @Override
-    public OWLSubClassOfAxiom asAxiom(OWLDataFactory df, UnaryOperator<String> toIRIString) {
-        OWLObjectUnionOf union = df.getOWLObjectUnionOf(
-                clause.entrySet().stream()
-                        .map(entry -> {
-                            OWLClass owlClass = df.getOWLClass(toIRIString.apply(entry.getKey()));
-                            return (entry.getValue()) ? owlClass : owlClass.getObjectComplementOf();
-                        }));
-        return df.getOWLSubClassOfAxiom(df.getOWLThing(), union);
+    public Map<String, Boolean> left() {
+        return Collections.emptyMap();
     }
 
     @Override
-    public Set<Integer> asClause(ToIntFunction<String> toPositiveLiteral) {
-        return clause.entrySet().stream()
-                .map(entry -> {
-                    int literal = toPositiveLiteral.applyAsInt(entry.getKey());
-                    return (entry.getValue()) ? literal : -literal;
-                }).collect(Collectors.toSet());
+    public Map<String, Boolean> right() {
+        return ImmutableMap.copyOf(clause);
     }
 
     /**
      * Returns a <code>Collector</code> that accumulates elements into a <code>FeasibilityConstraint</code>.
-     * Elements are partitioned according to the return value of <code>logicState</code>,
-     * which should return <code>false</code> if the element is a logical complement,
-     * then converted by the specified <code>converter</code> into preference domain values.
-     * @param logicState a function that returns <code>false</code> if the input element
-     *                   is a logical complement, <code>true</code> otherwise
+     * Elements are converted into preference domain values by the specified <code>converter</code>,
+     * then partitioned according to <code>truthValueFunc</code>, which returns their truth value.
+     * @param truthValueFunc a function that returns the truth value of the input element
      * @param converter a function that converts an input element into a preference domain value
      * @param <T> the type of input elements
      * @return
      */
     public static <T> Collector<T, ?, FeasibilityConstraint> toFeasibilityConstraint(
-            Predicate<T> logicState,
+            Predicate<T> truthValueFunc,
             Function<T, String> converter) {
-        Objects.requireNonNull(logicState);
+        Objects.requireNonNull(truthValueFunc);
         Objects.requireNonNull(converter);
         return Collectors.collectingAndThen(
-                Collectors.toMap(converter, logicState::test),
+                Collectors.toMap(converter, truthValueFunc::test),
                 FeasibilityConstraint::new);
     }
 
@@ -102,16 +80,6 @@ public class FeasibilityConstraint implements Constraint {
      */
     public static Builder builder() {
         return new Builder();
-    }
-
-    @Override
-    public String toString() {
-        String clauseAsString = clause.entrySet().stream()
-                .map(entry -> entry.getValue() ?
-                        entry.getKey() :
-                        "¬" + entry.getKey())
-                .collect(Collectors.joining(" ∨ "));
-        return "{ " + clauseAsString + " }";
     }
 
     public static class Builder extends StreamBasedBuilder<FeasibilityConstraint> {
