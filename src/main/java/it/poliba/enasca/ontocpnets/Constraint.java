@@ -8,7 +8,6 @@ import org.semanticweb.owlapi.model.OWLSubClassOfAxiom;
 import java.util.Map;
 import java.util.function.ToIntFunction;
 import java.util.function.UnaryOperator;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
@@ -16,20 +15,20 @@ import java.util.stream.IntStream;
  * <pre>A ∧ B ∧ ... → X ∨ Y ∨ ...</pre>
  * where the left side is a logical conjunction and the right side is a logical disjunction.
  */
-public abstract class Constraint {
+public interface Constraint {
     /**
      * Retrieves the left side of the propositional formula.
      * @return a <code>Map</code> that encodes variables as <code>String</code>s
      * associated with their truth value
      */
-    public abstract Map<String, Boolean> left();
+    Map<String, Boolean> left();
 
     /**
      * Retrieves the right side of the propositional formula.
      * @return a <code>Map</code> that encodes variables as <code>String</code>s
      * associated with their truth value
      */
-    public abstract Map<String, Boolean> right();
+    Map<String, Boolean> right();
 
     /**
      * Translates this propositional implication into a boolean clause in DIMACS format.
@@ -43,7 +42,7 @@ public abstract class Constraint {
      * @param converter a mapping function between element names and positive DIMACS literals
      * @return
      */
-    public IntStream asClause(ToIntFunction<String> converter) {
+    default IntStream asClause(ToIntFunction<String> converter) {
         IntStream leftSide = left().entrySet().stream()
                 .mapToInt(entry -> entry.getValue() ?
                         -converter.applyAsInt(entry.getKey()) :
@@ -70,7 +69,7 @@ public abstract class Constraint {
      *                  representations of {@link org.semanticweb.owlapi.model.IRI}s
      * @return
      */
-    public OWLSubClassOfAxiom asAxiom(OWLDataFactory df, UnaryOperator<String> converter) {
+    default OWLSubClassOfAxiom asAxiom(OWLDataFactory df, UnaryOperator<String> converter) {
         // Build the left side of the axiom.
         Map<String, Boolean> condition = left();
         OWLClassExpression leftSide = !condition.isEmpty() ?
@@ -92,21 +91,4 @@ public abstract class Constraint {
         return df.getOWLSubClassOfAxiom(leftSide, rightSide);
     }
 
-    @Override
-    public String toString() {
-        String leftSide = left().entrySet().stream()
-                .map(entry -> entry.getValue() ?
-                        entry.getKey() :
-                        "¬" + entry.getKey())
-                .collect(Collectors.joining(" ∧ "));
-        String rightSide = right().entrySet().stream()
-                .map(entry -> entry.getValue() ?
-                        entry.getKey() :
-                        "¬" + entry.getKey())
-                .collect(Collectors.joining(" ∨ "));
-        if (leftSide.isEmpty()) {
-            return '{' + rightSide + '}';
-        }
-        return '{' + leftSide + " → " + rightSide + '}';
-    }
 }

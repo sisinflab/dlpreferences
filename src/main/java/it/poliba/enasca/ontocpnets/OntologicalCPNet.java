@@ -125,7 +125,7 @@ public class OntologicalCPNet extends CPNet {
         ClosureBuilder closureBuilder = new ClosureBuilder();
         while (!forest.isEmpty()) {
             forest.expand(branch -> closureBuilder.accept(
-                    branch.collect(FeasibilityConstraint.toFeasibilityConstraint(
+                    branch.collect(FeasibilityConstraint.toConstraint(
                             literal -> literal > 0,
                             domainTable::getDomainElement))));
         }

@@ -17,7 +17,7 @@ import java.util.stream.Stream;
 /**
  * An element of the ontological closure.
  */
-public class FeasibilityConstraint extends Constraint {
+public class FeasibilityConstraint extends AbstractConstraint {
     /**
      * A union of elements with their respective logical state.
      * A boolean value of <code>false</code> indicates a logical complement.
@@ -25,7 +25,7 @@ public class FeasibilityConstraint extends Constraint {
      * <p>This map encodes the elements on the right side of the OWL axiom
      * returned by {@link Constraint#asAxiom(OWLDataFactory, UnaryOperator)}.
      */
-    Map<String, Boolean> clause;
+    private Map<String, Boolean> clause;
 
     private FeasibilityConstraint(Map<String, Boolean> clause) {
         this.clause = clause;
@@ -64,7 +64,7 @@ public class FeasibilityConstraint extends Constraint {
      * @param <T> the type of input elements
      * @return
      */
-    public static <T> Collector<T, ?, FeasibilityConstraint> toFeasibilityConstraint(
+    static <T> Collector<T, ?, FeasibilityConstraint> toConstraint(
             Predicate<T> truthValueFunc,
             Function<T, String> converter) {
         Objects.requireNonNull(truthValueFunc);
