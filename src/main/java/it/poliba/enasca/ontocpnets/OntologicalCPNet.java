@@ -4,7 +4,10 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Sets;
 import exception.PreferenceReasonerException;
-import it.poliba.enasca.ontocpnets.sat.*;
+import it.poliba.enasca.ontocpnets.sat.BooleanFormula;
+import it.poliba.enasca.ontocpnets.sat.ConcurrentBooleanFormula;
+import it.poliba.enasca.ontocpnets.sat.DIMACSLiterals;
+import it.poliba.enasca.ontocpnets.sat.SAT4JSolver;
 import it.poliba.enasca.ontocpnets.util.Lazy;
 import it.poliba.enasca.ontocpnets.util.LogicalSortedForest;
 import model.Outcome;
@@ -38,11 +41,10 @@ public class OntologicalCPNet extends CPNet {
     OWLOntology ontology;
 
     /**
-     * The <code>SATSolver</code> implementation used internally to find satisfiable models
-     * for collections of ontological constraints, such as {@link PreferenceGraph#getOptimumSet()}
-     * and {@link #getClosure()}.
+     * The SAT solver used internally to find satisfiable models for collections of ontological constraints,
+     * such as {@link PreferenceGraph#getOptimumSet()} and {@link #getClosure()}.
      */
-    private SATSolver solver;
+    private SAT4JSolver solver;
 
     /**
      * The ontological closure, wrapped in a lazy initializer.
@@ -56,7 +58,7 @@ public class OntologicalCPNet extends CPNet {
         super(builder.baseCPNet);
         domainTable = builder.domainTable;
         ontology = builder.augmentedOntology;
-        solver = builder.solver;
+        solver = new SAT4JSolver(domainTable.getDimacsLiterals().size());
         closure = new Lazy<>(this::computeClosure);
     }
 
@@ -343,8 +345,6 @@ public class OntologicalCPNet extends CPNet {
         private CPNet baseCPNet;
         private OWLOntology augmentedOntology;
         private DomainTable domainTable;
-        // optional parameters
-        private SATSolver solver;
         // build parameters
         private Set<String> domainValues;
         private OWLOntology baseOntology;
@@ -355,7 +355,6 @@ public class OntologicalCPNet extends CPNet {
             definitions = new HashMap<>();
             domainValues = this.baseCPNet.graph.domainValues().collect(Collectors.toSet());
             domainTable = null;
-            solver = null;
             baseOntology = null;
             augmentedOntology = null;
         }
@@ -373,20 +372,6 @@ public class OntologicalCPNet extends CPNet {
         public Builder withOntology(OWLOntology baseOntology) {
             if (this.baseOntology != null) throw new IllegalStateException();
             this.baseOntology = Objects.requireNonNull(baseOntology);
-            return this;
-        }
-
-        /**
-         * Specifies a <code>SATSolver</code> implementation for the {@link OntologicalCPNet} being built.
-         *
-         * <p>If {@link #build()} is invoked without setting a <code>SATSolver</code>,
-         * the default implementation will be used.
-         * @param solver
-         * @return
-         */
-        public Builder withSATSolver(SATSolver solver) {
-            if (this.solver != null) throw new IllegalStateException();
-            this.solver = Objects.requireNonNull(solver);
             return this;
         }
 
@@ -470,11 +455,6 @@ public class OntologicalCPNet extends CPNet {
                             .filter(iriString -> !existingIRIStrings.contains(iriString))
                             .findFirst().orElseThrow(() -> new IllegalStateException(
                                     String.format("Unable to generate a unique IRI for domain value '%s'", domainValue))));
-            // Configure the SAT solver.
-            if (solver == null) {
-                solver = SATSolverFactory.defaultSolver();
-            }
-            solver.setMaxLiteral(domainTable.getDimacsLiterals().size());
             // Build a mapping between domain values and their OWL representations.
             Map<String, OWLClass> owlDomainValues = domainValues.stream()
                     .collect(Collectors.toMap(
