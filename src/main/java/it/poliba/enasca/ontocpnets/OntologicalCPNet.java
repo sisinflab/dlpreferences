@@ -5,7 +5,6 @@ import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Sets;
 import exception.PreferenceReasonerException;
 import it.poliba.enasca.ontocpnets.sat.BooleanFormula;
-import it.poliba.enasca.ontocpnets.sat.ConcurrentBooleanFormula;
 import it.poliba.enasca.ontocpnets.sat.DIMACSLiterals;
 import it.poliba.enasca.ontocpnets.sat.SAT4JSolver;
 import it.poliba.enasca.ontocpnets.util.Lazy;
@@ -143,7 +142,7 @@ public class OntologicalCPNet extends CPNet {
         BooleanFormula formula = constraints
                 .map(constraint -> constraint.asClause(domainTable::getDimacsLiteral))
                 .map(DIMACSLiterals::new)
-                .collect(ConcurrentBooleanFormula.toFormula());
+                .collect(BooleanFormula.toFormula());
         return solver.solve(formula);
     }
 
@@ -192,12 +191,12 @@ public class OntologicalCPNet extends CPNet {
      */
     private class ClosureBuilder {
         private Set<FeasibilityConstraint> closure;
-        private ConcurrentBooleanFormula closureAsFormula;
+        private BooleanFormula closureAsFormula;
         private OWLDataFactory owlDataFactory;
 
         public ClosureBuilder() {
             closure = Collections.synchronizedSet(new HashSet<>());
-            closureAsFormula = new ConcurrentBooleanFormula();
+            closureAsFormula = BooleanFormula.emptySynchronized();
             owlDataFactory = OWLManager.createConcurrentOWLOntologyManager().getOWLDataFactory();
         }
 

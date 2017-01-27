@@ -1,90 +1,92 @@
 package it.poliba.enasca.ontocpnets.sat;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
  * A boolean formula in conjunctive normal form.
  */
-public class BooleanFormula {
-    Set<DIMACSLiterals> clauses;
-
-    protected BooleanFormula(Set<DIMACSLiterals> clauses) {
-        this.clauses = clauses;
-    }
-
-    public BooleanFormula() {
-        this(new HashSet<>());
-    }
-
+public interface BooleanFormula {
     /**
      * Adds the specified clause.
      * @param clause
      */
-    public void addClause(IntStream clause) {
-        clauses.add(new DIMACSLiterals(clause));
-    }
+    void addClause(IntStream clause);
 
     /**
      * Adds the negation of the specified clause, that is,
      * the conjunction of its negated literals (De Morgan's law).
      * @param clause
      */
-    public void addNegatedClause(IntStream clause) {
-        Objects.requireNonNull(clause).forEachOrdered(
-                literal -> addLiteral(-literal));
-    }
+    void addNegatedClause(IntStream clause);
 
     /**
      * Adds a trivial clause consisting of the specified literal.
      * @param literal
      */
-    public void addLiteral(int literal) {
-        clauses.add(DIMACSLiterals.of(literal));
-    }
+    void addLiteral(int literal);
+
+    /**
+     * Returns the clauses that make up this formula.
+     * @return
+     */
+    Stream<DIMACSLiterals> clauses();
 
     /**
      * Returns the number of clauses in this formula.
      * @return
      */
-    public int size() {
-        return clauses.size();
+    int size();
+
+    /**
+     * Returns a copy of this formula.
+     * @return
+     */
+    BooleanFormula copy();
+
+    /**
+     * Returns an empty formula.
+     * @return
+     */
+    static BooleanFormula empty() {
+        return new SimpleBooleanFormula();
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        BooleanFormula other = (BooleanFormula) o;
-        return clauses.equals(other.clauses);
+    /**
+     * Returns a thread-safe implementation of <code>BooleanFormula</code>,
+     * initialized to an empty formula.
+     * @return
+     */
+    static BooleanFormula emptySynchronized() {
+        return new SynchronizedBooleanFormula();
     }
 
-    @Override
-    public int hashCode() {
-        return clauses.hashCode();
-    }
-
-    @Override
-    public String toString() {
-        return clauses.stream()
-                .map(clause -> Arrays.stream(clause.literals)
-                        .mapToObj(String::valueOf)
-                        .collect(Collectors.joining(" ∨ ", "(", ")")))
-                .collect(Collectors.joining(" ∧ "));
-    }
-
-    public static BooleanFormula copyOf(BooleanFormula orig) {
-        return orig.clauses.stream().collect(toFormula());
-    }
-
-    public static Collector<DIMACSLiterals, ?, BooleanFormula> toFormula() {
+    /**
+     * Returns a <code>Collector</code> that accumulates input clauses into a new formula.
+     * @return
+     */
+    static Collector<DIMACSLiterals, ?, ? extends BooleanFormula> toFormula() {
         return Collectors.collectingAndThen(
                 Collectors.toCollection(HashSet::new),
-                BooleanFormula::new);
+                SimpleBooleanFormula::new);
+    }
+
+    /**
+     * Returns a <code>Collector</code> that accumulates input clauses into a
+     * thread-safe implementation of <code>BooleanFormula</code>.
+     * @return
+     */
+    static Collector<DIMACSLiterals, ?, ? extends BooleanFormula> toSynchronizedFormula() {
+        return Collector.of(
+                () -> Collections.<DIMACSLiterals>synchronizedSet(new HashSet<>()),
+                Set::add,
+                (left, right) -> { left.addAll(right); return left; },
+                SynchronizedBooleanFormula::new,
+                Collector.Characteristics.CONCURRENT, Collector.Characteristics.UNORDERED);
     }
 }

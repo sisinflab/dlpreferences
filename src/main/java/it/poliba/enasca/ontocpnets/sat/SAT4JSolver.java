@@ -7,6 +7,7 @@ import org.sat4j.specs.ContradictionException;
 import org.sat4j.specs.TimeoutException;
 import org.sat4j.tools.ModelIterator;
 
+import java.util.Iterator;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.IntStream;
@@ -86,7 +87,7 @@ public class SAT4JSolver {
      *
      * <p>This is equivalent to
      * <pre>{@code
-     * BooleanFormula testFormula = BooleanFormula.copyOf(formula);
+     * BooleanFormula testFormula = formula.copy();
      * testFormula.addNegatedClause(clause);
      * return !isSatisfiable(testFormula);
      * }</pre>
@@ -95,7 +96,7 @@ public class SAT4JSolver {
      * @return
      */
     public boolean implies(BooleanFormula formula, IntStream clause) {
-        BooleanFormula testFormula = BooleanFormula.copyOf(formula);
+        BooleanFormula testFormula = formula.copy();
         testFormula.addNegatedClause(clause);
         return !isSatisfiable(testFormula);
     }
@@ -116,8 +117,8 @@ public class SAT4JSolver {
         }
         solver.setExpectedNumberOfClauses(problem.size());
         try {
-            for (DIMACSLiterals clause : problem.clauses) {
-                solver.addClause(new VecInt(clause.literals));
+            for (Iterator<DIMACSLiterals> it = problem.clauses().iterator(); it.hasNext(); ) {
+                solver.addClause(new VecInt(it.next().literals));
             }
         } catch (ContradictionException e) {
             solver = null;
