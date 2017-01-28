@@ -1,15 +1,18 @@
 package it.poliba.enasca.ontocpnets.sat;
 
 import it.poliba.enasca.ontocpnets.except.SATRuntimeException;
+import org.sat4j.core.Vec;
 import org.sat4j.core.VecInt;
 import org.sat4j.minisat.SolverFactory;
 import org.sat4j.specs.ContradictionException;
+import org.sat4j.specs.IVec;
+import org.sat4j.specs.IVecInt;
 import org.sat4j.specs.TimeoutException;
 import org.sat4j.tools.ModelIterator;
 
-import java.util.Iterator;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collector;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -56,13 +59,17 @@ public class SAT4JSolver {
          * @return
          */
     public boolean isSatisfiable(BooleanFormula problem) {
-        Optional<ModelIterator> modelIterator = populate(problem);
-        if (!modelIterator.isPresent()) return false;
+        Optional<ModelIterator> modelIteratorOpt = populate(problem);
+        if (!modelIteratorOpt.isPresent()) return false;
+        ModelIterator solver = modelIteratorOpt.get();
         boolean result;
         try {
-            result = modelIterator.get().isSatisfiable();
+            result = solver.isSatisfiable();
         } catch (TimeoutException e) {
             throw new SATRuntimeException(e);
+        } finally {
+            // Free the resources acquired by solver.
+            solver.reset();
         }
         return result;
     }
@@ -77,9 +84,9 @@ public class SAT4JSolver {
          * @return the satisfiable models for the input problem
          */
     public Stream<DIMACSLiterals> solve(BooleanFormula problem) {
-        Optional<ModelIterator> modelIterator = populate(problem);
-        if (!modelIterator.isPresent()) return Stream.empty();
-        return models(modelIterator.get());
+        Optional<ModelIterator> modelIteratorOpt = populate(problem);
+        if (!modelIteratorOpt.isPresent()) return Stream.empty();
+        return models(modelIteratorOpt.get());
     }
 
     /**
@@ -105,21 +112,23 @@ public class SAT4JSolver {
      * Creates a {@link ModelIterator} object ready to find satisfiable models
      * for the specified problem.
      * If <code>problem</code> is trivially unsatisfiable, an empty <code>Optional</code> is returned.
+     *
+     * <p>Note that the caller is responsible for invoking {@link ModelIterator#reset()}
+     * once the work with the returned object is finished. Failing to do so may result in a memory leak.
      * @param problem
      * @return a solver for the specified problem, or an empty <code>Optional</code>
-     * if the problem is trivially unsatisfiable.
+     * if the problem is trivially unsatisfiable. The caller is responsible for invoking the cleanup
+     * method {@link ModelIterator#reset()} once the work with the returned object is finished.
      */
     private Optional<ModelIterator> populate(BooleanFormula problem) {
-        Objects.requireNonNull(problem);
+        IVec<IVecInt> problemAsIVec = Objects.requireNonNull(problem).clauses().collect(toIVec());
         ModelIterator solver = new ModelIterator(SolverFactory.newDefault());
         if (maxLiteral > 0) {
             solver.newVar(maxLiteral);
         }
-        solver.setExpectedNumberOfClauses(problem.size());
+        solver.setExpectedNumberOfClauses(problemAsIVec.size());
         try {
-            for (Iterator<DIMACSLiterals> it = problem.clauses().iterator(); it.hasNext(); ) {
-                solver.addClause(new VecInt(it.next().literals));
-            }
+            solver.addAllClauses(problemAsIVec);
         } catch (ContradictionException e) {
             solver = null;
         }
@@ -142,8 +151,23 @@ public class SAT4JSolver {
             }
         } catch (TimeoutException e) {
             throw new SATRuntimeException(e);
+        } finally {
+            // Free the resources acquired by solver.
+            solver.reset();
         }
         return builder.build();
+    }
+
+    /**
+     * Returns a Collector that accumulates input clauses into an <code>IVec<IVecInt></code>,
+     * which is the representation used by the SAT4J library for collections of clauses.
+     * @return
+     */
+    private static Collector<DIMACSLiterals, ?, IVec<IVecInt>> toIVec() {
+        return Collector.of(
+                Vec::new,
+                (vec, dimacs) -> vec.push(new VecInt(dimacs.literals)),
+                (left, right) -> { right.moveTo(left); return left; });
     }
 
 }
