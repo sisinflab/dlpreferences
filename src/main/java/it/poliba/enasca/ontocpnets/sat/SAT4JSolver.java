@@ -11,7 +11,6 @@ import org.sat4j.specs.TimeoutException;
 import org.sat4j.tools.ModelIterator;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collector;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -20,14 +19,17 @@ import java.util.stream.Stream;
  * A boolean SAT solver based on the SAT4J library.
  */
 public class SAT4JSolver {
+    private static int MAXLITERAL_DEFAULT = 0;
+    private static int MAXRESULTS_UNLIMITED = -1;
+
     /**
-     * If <code>&gt; 0</code>, this value overrides the number of variables
+     * If <code>!= MAXLITERAL_DEFAULT</code>, this value overrides the number of variables
      * for problems handled by this solver.
      */
-    protected int maxLiteral;
+    private int maxLiteral;
 
     public SAT4JSolver() {
-        maxLiteral = 0;
+        maxLiteral = MAXLITERAL_DEFAULT;
     }
 
     /**
@@ -40,16 +42,20 @@ public class SAT4JSolver {
      * SAT4JSolver s = new SAT4JSolver();
      * s.setMaxLiteral(maxLiteral);
      * }</pre>
-     * @param maxLiteral
+     * @param maxLiteral a positive integer indicating a fixed number of variables for problems
+     *                   handled by this <code>SAT4JSolver</code>
+     * @throws IllegalArgumentException if <code>maxLiteral &lt; 1</code>
      */
     public SAT4JSolver(int maxLiteral) {
-        this.maxLiteral = maxLiteral;
+        setMaxLiteral(maxLiteral);
     }
 
     /**
      * Sets the number of variables for problems handled by this solver.
+     * @throws IllegalArgumentException if <code>maxLiteral &lt; 1</code>
      */
     public void setMaxLiteral(int maxLiteral) {
+        if (maxLiteral < 1) throw new IllegalArgumentException();
         this.maxLiteral = maxLiteral;
     }
 
@@ -59,34 +65,20 @@ public class SAT4JSolver {
          * @return
          */
     public boolean isSatisfiable(BooleanFormula problem) {
-        Optional<ModelIterator> modelIteratorOpt = populate(problem);
-        if (!modelIteratorOpt.isPresent()) return false;
-        ModelIterator solver = modelIteratorOpt.get();
-        boolean result;
-        try {
-            result = solver.isSatisfiable();
-        } catch (TimeoutException e) {
-            throw new SATRuntimeException(e);
-        } finally {
-            // Free the resources acquired by solver.
-            solver.reset();
-        }
-        return result;
+        return models(Objects.requireNonNull(problem), 0) != null;
     }
 
     /**
-         * Solves a boolean satisfiability problem expressed in DIMACS CNF format.
-         * If the <code>maxLiteral</code> parameter has been set using {@link #setMaxLiteral(int)}
-         * and <code>maxLiteral &gt; 0</code>, the solver will use <code>maxLiteral</code> as
-         * the total number of variables in the boolean problem, otherwise the actual number
-         * of variables in <code>problem</code> will be used.
-         * @param problem
-         * @return the satisfiable models for the input problem
-         */
+     * Solves a boolean satisfiability problem expressed in DIMACS CNF format.
+     * If the <code>maxLiteral</code> parameter has been set using {@link #setMaxLiteral(int)}
+     * the solver will use <code>maxLiteral</code> as the total number of variables in the boolean problem,
+     * otherwise the actual number of variables in <code>problem</code> will be used.
+     * @param problem
+     * @return the satisfiable models for the input problem
+     */
     public Stream<DIMACSLiterals> solve(BooleanFormula problem) {
-        Optional<ModelIterator> modelIteratorOpt = populate(problem);
-        if (!modelIteratorOpt.isPresent()) return Stream.empty();
-        return models(modelIteratorOpt.get());
+        Stream<DIMACSLiterals> modelStream = models(Objects.requireNonNull(problem), MAXRESULTS_UNLIMITED);
+        return modelStream != null ? modelStream : Stream.empty();
     }
 
     /**
@@ -109,50 +101,46 @@ public class SAT4JSolver {
     }
 
     /**
-     * Creates a {@link ModelIterator} object ready to find satisfiable models
-     * for the specified problem.
-     * If <code>problem</code> is trivially unsatisfiable, an empty <code>Optional</code> is returned.
-     *
-     * <p>Note that the caller is responsible for invoking {@link ModelIterator#reset()}
-     * once the work with the returned object is finished. Failing to do so may result in a memory leak.
+     * Finds up to <code>maxResults</code> models for the specified problem.
+     * If <code>maxResults &lt; 0</code>, all models are returned.
+     * If <code>problem</code> is unsatisfiable, <code>null</code> is returned.
      * @param problem
-     * @return a solver for the specified problem, or an empty <code>Optional</code>
-     * if the problem is trivially unsatisfiable. The caller is responsible for invoking the cleanup
-     * method {@link ModelIterator#reset()} once the work with the returned object is finished.
+     * @param maxResults if <code>!= MAXRESULTS_UNLIMITED</code>, limits the maximum number
+     *                   of solutions to be returned, otherwise has no effect
+     * @return the models of the input problem, or <code>null</code> if the input problem
+     * is unsatisfiable
      */
-    private Optional<ModelIterator> populate(BooleanFormula problem) {
-        IVec<IVecInt> problemAsIVec = Objects.requireNonNull(problem).clauses().collect(toIVec());
+    private Stream<DIMACSLiterals> models(BooleanFormula problem, int maxResults) {
+        // Build the internal representation of the input problem.
+        IVec<IVecInt> problemAsIVec = problem.clauses().collect(toIVec());
         ModelIterator solver = new ModelIterator(SolverFactory.newDefault());
-        if (maxLiteral > 0) {
+        if (maxLiteral != MAXLITERAL_DEFAULT) {
             solver.newVar(maxLiteral);
         }
         solver.setExpectedNumberOfClauses(problemAsIVec.size());
         try {
             solver.addAllClauses(problemAsIVec);
         } catch (ContradictionException e) {
-            solver = null;
+            return null;
         }
-        return Optional.ofNullable(solver);
-    }
-
-    /**
-     * Finds satisfiable models using the specified <code>ModelIterator</code>.
-     * If the problem is unsatisfiable, an empty <code>Stream</code> is returned.
-     * @param solver
-     * @return
-     * @throws SATRuntimeException if the solver behaves unexpectedly while computing satisfiable models
-     */
-    private static Stream<DIMACSLiterals> models(ModelIterator solver) {
-        Objects.requireNonNull(solver);
+        // Find models.
         Stream.Builder<DIMACSLiterals> builder = Stream.builder();
         try {
-            while (solver.isSatisfiable()) {
+            if (!solver.isSatisfiable()) {
+                return null;
+            }
+            if (maxResults > 0) {
+                builder.accept(new DIMACSLiterals(solver.model()));
+            }
+            while ((solver.numberOfModelsFoundSoFar() < maxResults || maxResults == MAXRESULTS_UNLIMITED)
+                    && solver.isSatisfiable()) {
                 builder.accept(new DIMACSLiterals(solver.model()));
             }
         } catch (TimeoutException e) {
             throw new SATRuntimeException(e);
         } finally {
             // Free the resources acquired by solver.
+            // This call prevents memory leak issues in the SAT4J library.
             solver.reset();
         }
         return builder.build();
