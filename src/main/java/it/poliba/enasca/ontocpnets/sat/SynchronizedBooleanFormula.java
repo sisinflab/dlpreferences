@@ -4,14 +4,13 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
  * A thread-safe implementation of {@link BooleanFormula}.
  */
 class SynchronizedBooleanFormula extends AbstractBooleanFormula {
-    SynchronizedBooleanFormula(Set<DIMACSLiterals> clauses) {
+    SynchronizedBooleanFormula(Set<DimacsLiterals> clauses) {
         super(clauses);
     }
 
@@ -20,12 +19,13 @@ class SynchronizedBooleanFormula extends AbstractBooleanFormula {
     }
 
     @Override
-    public void addNegatedClause(IntStream clause) {
-        Objects.requireNonNull(clause).forEach(literal -> addLiteral(-literal));
+    public void addNegatedClause(DimacsLiterals clause) {
+        Objects.requireNonNull(clause).stream()
+                .forEach(literal -> addLiteral(-literal));
     }
 
     @Override
-    public Stream<DIMACSLiterals> clauses() {
+    public Stream<DimacsLiterals> clauses() {
         return clausesCNF.parallelStream();
     }
 

@@ -1,14 +1,17 @@
 package it.poliba.enasca.ontocpnets;
 
+import it.poliba.enasca.ontocpnets.sat.DimacsLiterals;
+import it.poliba.enasca.ontocpnets.sat.DimacsProvider;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLDataFactory;
 import org.semanticweb.owlapi.model.OWLSubClassOfAxiom;
+import org.semanticweb.owlapi.rdf.rdfxml.parser.IRIProvider;
 
 import java.util.Map;
-import java.util.function.ToIntFunction;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
  * An ontological constraint, represented as a propositional implication of the form
@@ -32,61 +35,55 @@ public interface Constraint {
 
     /**
      * Translates this propositional implication into a boolean clause in DIMACS format.
-     * DIMACS literals are obtained using the specified <code>converter</code>, which maps
-     * propositional variables to positive integers.
+     * DIMACS literals are obtained using the specified <code>converter</code>.
      *
      * <p>The general form
      * <pre>A ∧ B ∧ ... → X ∨ Y ∨ ...</pre>
      * is translated into the equivalent clause
      * <pre>¬A ∨ ¬B ∨ ... ∨ X ∨ Y ∨ ...</pre>
-     * @param converter a mapping function between element names and positive DIMACS literals
+     * @param converter a mapping function between element names and DIMACS literals
      * @return
      */
-    default IntStream asClause(ToIntFunction<String> converter) {
+    default DimacsLiterals asClause(DimacsProvider converter) {
         IntStream leftSide = left().entrySet().stream()
-                .mapToInt(entry -> entry.getValue() ?
-                        -converter.applyAsInt(entry.getKey()) :
-                        converter.applyAsInt(entry.getKey()));
+                .mapToInt(converter::getLiteral)
+                .map(literal -> -literal);
         IntStream rightSide = right().entrySet().stream()
-                .mapToInt(entry -> entry.getValue() ?
-                        converter.applyAsInt(entry.getKey()) :
-                        -converter.applyAsInt(entry.getKey()));
-        return IntStream.concat(leftSide, rightSide);
+                .mapToInt(converter::getLiteral);
+        return new DimacsLiterals(IntStream.concat(leftSide, rightSide));
     }
 
     /**
      * Translates this propositional implication into an OWL axiom of the form:
      * <pre>{@code SubClassOf(ObjectIntersectionOf(A, B, ...), ObjectUnionOf(X, Y, ...))}</pre>
      * Propositional variables are converted into {@link org.semanticweb.owlapi.model.IRI}s
-     * using the specified <code>UnaryOperator</code>, then into {@link org.semanticweb.owlapi.model.OWLClass}es
+     * using the specified <code>IRIProvider</code>, then into {@link org.semanticweb.owlapi.model.OWLClass}es
      * using the specified <code>OWLDataFactory</code>.
      *
      * <p>If the left side of the axiom is empty, the <em>Top</em> entity <code>owl:Thing</code>
      * will be used instead. If the right side is empty, the <em>Bottom</em> entity <code>owl:Nothing</code>
      * will be used instead.
      * @param df
-     * @param converter a mapping function between propositional variables and <code>String</code>
-     *                  representations of {@link org.semanticweb.owlapi.model.IRI}s
+     * @param iriProvider
      * @return
      */
-    default OWLSubClassOfAxiom asAxiom(OWLDataFactory df, UnaryOperator<String> converter) {
+    default OWLSubClassOfAxiom asAxiom(OWLDataFactory df, IRIProvider iriProvider) {
+        // Define a function that converts propositional variables into OWL classes.
+        Function<Map<String, Boolean>, Stream<OWLClassExpression>> owlClassProvider =
+                propositionalVars -> propositionalVars.entrySet().stream()
+                        .map(entry -> {
+                            OWLClass owlClass = df.getOWLClass(iriProvider.getIRI(entry.getKey()));
+                            return (entry.getValue()) ? owlClass : owlClass.getObjectComplementOf();
+                        });
         // Build the left side of the axiom.
         Map<String, Boolean> condition = left();
         OWLClassExpression leftSide = !condition.isEmpty() ?
-                df.getOWLObjectIntersectionOf(
-                        condition.entrySet().stream().map(entry -> {
-                            OWLClass owlClass = df.getOWLClass(converter.apply(entry.getKey()));
-                            return (entry.getValue()) ? owlClass : owlClass.getObjectComplementOf();
-                        })) :
+                df.getOWLObjectIntersectionOf(owlClassProvider.apply(condition)) :
                 df.getOWLThing();
         // Build the right side of the axiom.
         Map<String, Boolean> clause = right();
         OWLClassExpression rightSide = !clause.isEmpty() ?
-                df.getOWLObjectUnionOf(
-                        clause.entrySet().stream().map(entry -> {
-                            OWLClass owlClass = df.getOWLClass(converter.apply(entry.getKey()));
-                            return (entry.getValue()) ? owlClass : owlClass.getObjectComplementOf();
-                        })) :
+                df.getOWLObjectUnionOf(owlClassProvider.apply(clause)) :
                 df.getOWLNothing();
         return df.getOWLSubClassOfAxiom(leftSide, rightSide);
     }

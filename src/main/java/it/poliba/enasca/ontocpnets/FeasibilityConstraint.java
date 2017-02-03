@@ -1,6 +1,8 @@
 package it.poliba.enasca.ontocpnets;
 
 import com.google.common.collect.ImmutableMap;
+import it.poliba.enasca.ontocpnets.sat.DimacsLiterals;
+import it.poliba.enasca.ontocpnets.sat.VarNameProvider;
 import it.poliba.enasca.ontocpnets.util.StreamBasedBuilder;
 import org.semanticweb.owlapi.model.OWLDataFactory;
 
@@ -23,12 +25,16 @@ public class FeasibilityConstraint extends AbstractConstraint {
      * A boolean value of <code>false</code> indicates a logical complement.
      *
      * <p>This map encodes the elements on the right side of the OWL axiom
-     * returned by {@link Constraint#asAxiom(OWLDataFactory, UnaryOperator)}.
+     * returned by {@link Constraint#asAxiom(OWLDataFactory, org.semanticweb.owlapi.rdf.rdfxml.parser.IRIProvider)}.
      */
     private Map<String, Boolean> clause;
 
     private FeasibilityConstraint(Map<String, Boolean> clause) {
         this.clause = clause;
+    }
+
+    public FeasibilityConstraint(DimacsLiterals clause, VarNameProvider converter) {
+        this(clause.asMap(converter));
     }
 
     @Override

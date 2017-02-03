@@ -4,9 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Sets;
 import exception.PreferenceReasonerException;
-import it.poliba.enasca.ontocpnets.sat.BooleanFormula;
-import it.poliba.enasca.ontocpnets.sat.DIMACSLiterals;
-import it.poliba.enasca.ontocpnets.sat.SAT4JSolver;
+import it.poliba.enasca.ontocpnets.sat.*;
 import it.poliba.enasca.ontocpnets.util.Lazy;
 import it.poliba.enasca.ontocpnets.util.LogicalSortedForest;
 import model.Outcome;
@@ -15,12 +13,12 @@ import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.model.parameters.ChangeApplied;
 import org.semanticweb.owlapi.model.parameters.OntologyCopy;
+import org.semanticweb.owlapi.rdf.rdfxml.parser.IRIProvider;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 import java.io.IOException;
 import java.util.*;
 import java.util.function.Function;
-import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -32,7 +30,7 @@ public class OntologicalCPNet extends CPNet {
     /**
      * Stores equivalent representations of the preference domain entities that were added to the base ontology.
      */
-    private DomainTable domainTable;
+    DomainTable domainTable;
 
     /**
      * The augmented ontology, constructed by adding preference domain entities to the base ontology.
@@ -71,7 +69,7 @@ public class OntologicalCPNet extends CPNet {
      * @throws IOException if an internal call to {@link #dominates(Outcome, Outcome)} results in an <code>IOException</code>
      */
     public Set<Outcome> hardPareto() throws IOException {
-        Set<DIMACSLiterals> undominatedModels, feasibleModels, optimalModels;
+        Set<DimacsLiterals> undominatedModels, feasibleModels, optimalModels;
         // Solve the optimum set and the ontological closure as boolean problems.
         undominatedModels = solveConstraints(graph.getOptimumSet().stream())
                 .collect(Collectors.toSet());
@@ -124,10 +122,8 @@ public class OntologicalCPNet extends CPNet {
                 .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
         ClosureBuilder closureBuilder = new ClosureBuilder();
         while (!forest.isEmpty()) {
-            forest.expand(branch -> closureBuilder.accept(
-                    branch.collect(FeasibilityConstraint.toConstraint(
-                            literal -> literal > 0,
-                            domainTable::getDomainElement))));
+            forest.expand(branchClause -> closureBuilder.accept(
+                    new DimacsLiterals(branchClause.mapToInt(Integer::intValue))));
         }
         return closureBuilder.build();
     }
@@ -138,10 +134,9 @@ public class OntologicalCPNet extends CPNet {
      * @param constraints
      * @return
      */
-    private Stream<DIMACSLiterals> solveConstraints(Stream<? extends Constraint> constraints) {
+    private Stream<DimacsLiterals> solveConstraints(Stream<? extends Constraint> constraints) {
         BooleanFormula formula = constraints
-                .map(constraint -> constraint.asClause(domainTable::getDimacsLiteral))
-                .map(DIMACSLiterals::new)
+                .map(constraint -> constraint.asClause(domainTable))
                 .collect(BooleanFormula.toFormula());
         return solver.solve(formula);
     }
@@ -151,10 +146,10 @@ public class OntologicalCPNet extends CPNet {
      * @param model
      * @return
      */
-    private Outcome interpretModel(DIMACSLiterals model) {
+    private Outcome interpretModel(DimacsLiterals model) {
         Set<String> domainValuesInModel = model.stream()
                 .filter(dimacsLiteral -> dimacsLiteral > 0)
-                .mapToObj(domainTable::getDomainElement)
+                .mapToObj(domainTable::fromPositiveLiteral)
                 .collect(Collectors.toSet());
         Map<String, String> assignments = graph.domainMap().entrySet().stream()
                 .collect(Collectors.toMap(
@@ -185,7 +180,7 @@ public class OntologicalCPNet extends CPNet {
      * Builds the ontological closure by accepting {@link FeasibilityConstraint}s
      * and checking whether they are eligible for inclusion in the closure.
      * A feasibility constraint is eligible if the axiom obtained from
-     * {@link Constraint#asAxiom(OWLDataFactory, UnaryOperator)} is entailed by the ontology.
+     * {@link Constraint#asAxiom(OWLDataFactory, IRIProvider)} is entailed by the ontology.
      *
      * <p>This is a thread-safe implementation.
      */
@@ -201,33 +196,32 @@ public class OntologicalCPNet extends CPNet {
         }
 
         /**
-         * Returns <code>true</code> if the specified <code>constraint</code> is eligible
-         * for inclusion in the ontological closure.
+         * Returns <code>true</code> if the specified branch clause, interpreted as
+         * a {@link FeasibilityConstraint}, is eligible for inclusion in the ontological closure.
          * A feasibility constraint is eligible if the axiom obtained from
-         * {@link Constraint#asAxiom(OWLDataFactory, UnaryOperator)} is entailed by the ontology.
+         * {@link Constraint#asAxiom(OWLDataFactory, IRIProvider)} is entailed by the ontology.
          *
          * <p>If an eligible constraint is not redundant (that is, it is not already
          * entailed by the axioms collected in the closure so far), it is added to the closure.
-         * @param constraint
+         *
+         * @param branchClause
          * @return
          */
-        public boolean accept(FeasibilityConstraint constraint) {
-            int[] branchClause = Objects.requireNonNull(constraint)
-                    .asClause(domainTable::getDimacsLiteral)
-                    .toArray();
+        public boolean accept(DimacsLiterals branchClause) {
             // Check whether the current branch clause is entailed by the closure.
-            if (solver.implies(closureAsFormula, Arrays.stream(branchClause))) {
+            if (solver.implies(closureAsFormula, branchClause)) {
                 return true;
             }
             // Since the HermiT reasoner does not support concurrency, a fresh instance must be created.
             OWLReasoner ontologyReasoner = new ReasonerFactory().createReasoner(ontology);
             // Check whether the current branch axiom is entailed by the ontology.
-            OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(owlDataFactory, domainTable::getIRIString);
+            FeasibilityConstraint constraint = new FeasibilityConstraint(branchClause, domainTable);
+            OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(owlDataFactory, domainTable);
             boolean isEntailed = ontologyReasoner.isEntailed(branchAxiom);
             ontologyReasoner.dispose();
             if (isEntailed) {
                 closure.add(constraint);
-                closureAsFormula.addClause(Arrays.stream(branchClause));
+                closureAsFormula.addClause(branchClause);
             }
             return isEntailed;
         }
@@ -243,18 +237,19 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Stores equivalent representations of the preference domain entities that were
+     * Stores equivalent representations of the preference domain elements that were
      * added to the base ontology.
      */
-    private static class DomainTable {
+    static class DomainTable implements
+            DimacsProvider, VarNameProvider, IRIProvider {
 
         /**
-         * Stores equivalent representations of the preference domain entities that were added to the base ontology.
-         * Specifically:
+         * Stores equivalent representations of the preference domain elements
+         * that were added to the base ontology. Specifically:
          * <ul>
          *     <li>rows contain the string identifiers found in the preference specification file;</li>
          *     <li>columns contain positive integers, for use as DIMACS literals in boolean satisfiability problems;</li>
-         *     <li>values contain IRI strings.</li>
+         *     <li>values contain <code>IRI</code>s.</li>
          * </ul>
          *
          * <p>For example, consider the preference variables <i>A</i> and <i>B</i>, with domain values
@@ -269,14 +264,15 @@ public class OntologicalCPNet extends CPNet {
          *
          * <p>Note that no particular order is guaranteed when assigning DIMACS literals.
          */
-        private ImmutableTable<String, Integer, String> table;
+        private ImmutableTable<String, Integer, IRI> table;
 
-        public DomainTable(Set<String> elements, UnaryOperator<String> toIRIString) {
-            Objects.requireNonNull(toIRIString);
-            ImmutableTable.Builder<String, Integer, String> builder = ImmutableTable.builder();
+        DomainTable(Set<String> elements, Function<String, IRI> toIRI) {
+            Objects.requireNonNull(elements);
+            Objects.requireNonNull(toIRI);
+            ImmutableTable.Builder<String, Integer, IRI> builder = ImmutableTable.builder();
             int dimacsLiteral = 0;
-            for (String element : Objects.requireNonNull(elements)) {
-                builder.put(element, ++dimacsLiteral, toIRIString.apply(element));
+            for (String element : elements) {
+                builder.put(element, ++dimacsLiteral, toIRI.apply(element));
             }
             table = builder.build();
         }
@@ -287,7 +283,9 @@ public class OntologicalCPNet extends CPNet {
          * @return
          * @throws NoSuchElementException if the argument does not exist in the internal table
          */
-        public int getDimacsLiteral(String domainElement) {
+        @Override
+        public int getPositiveLiteral(String domainElement) {
+            Objects.requireNonNull(domainElement);
             return table.row(domainElement).keySet().iterator().next();
         }
 
@@ -300,9 +298,8 @@ public class OntologicalCPNet extends CPNet {
          * @throws NoSuchElementException if the argument does not exist in the internal table
          * @throws IllegalArgumentException if the argument is 0
          */
-        public String getDomainElement(int value) {
-            if (value == 0) throw new IllegalArgumentException();
-            if (value < 0) value = -value;
+        @Override
+        public String fromPositiveLiteral(int value) {
             return table.column(value).keySet().iterator().next();
         }
 
@@ -312,16 +309,10 @@ public class OntologicalCPNet extends CPNet {
          * @return
          * @throws NoSuchElementException if the argument does not exist in the internal table
          */
-        public String getIRIString(String domainElement) {
+        @Override
+        public IRI getIRI(String domainElement) {
+            Objects.requireNonNull(domainElement);
             return table.row(domainElement).values().iterator().next();
-        }
-
-        /**
-         * Returns the set of domain elements.
-         * @return
-         */
-        public Set<String> getDomainElements() {
-            return table.rowKeySet();
         }
 
         /**
@@ -444,21 +435,22 @@ public class OntologicalCPNet extends CPNet {
             String baseIRIString = augmentedOntology.getOntologyID().getOntologyIRI()
                     .orElse(manager.getOntologyDocumentIRI(augmentedOntology))
                     .getIRIString();
-            Set<String> existingIRIStrings = augmentedOntology.classesInSignature()
-                    .map(owlClass -> owlClass.getIRI().getIRIString())
+            Set<IRI> existingIRIs = augmentedOntology.classesInSignature()
+                    .map(HasIRI::getIRI)
                     .collect(Collectors.toSet());
             domainTable = new DomainTable(
                     domainValues,
                     domainValue -> Arrays.stream(DISAMBIGUATION_SUFFIXES)
                             .map(suffix -> baseIRIString + "#" + domainValue + suffix)
-                            .filter(iriString -> !existingIRIStrings.contains(iriString))
+                            .map(IRI::create)
+                            .filter(iri -> !existingIRIs.contains(iri))
                             .findFirst().orElseThrow(() -> new IllegalStateException(
                                     String.format("Unable to generate a unique IRI for domain value '%s'", domainValue))));
             // Build a mapping between domain values and their OWL representations.
             Map<String, OWLClass> owlDomainValues = domainValues.stream()
                     .collect(Collectors.toMap(
                             Function.identity(),
-                            domainValue -> owlDataFactory.getOWLClass(domainTable.getIRIString(domainValue))));
+                            domainValue -> owlDataFactory.getOWLClass(domainTable.getIRI(domainValue))));
             // Build the new class definition axioms.
             Stream<OWLEquivalentClassesAxiom> classDefinitions = domainValues.stream()
                     .map(domainValue -> owlDataFactory.getOWLEquivalentClassesAxiom(

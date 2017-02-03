@@ -4,36 +4,38 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
  * A skeletal implementation of {@link BooleanFormula}.
  */
 abstract class AbstractBooleanFormula implements BooleanFormula {
-    protected Set<DIMACSLiterals> clausesCNF;
+    protected Set<DimacsLiterals> clausesCNF;
 
-    AbstractBooleanFormula(Set<DIMACSLiterals> clausesCNF) {
+    AbstractBooleanFormula(Set<DimacsLiterals> clausesCNF) {
         this.clausesCNF = clausesCNF;
     }
 
     @Override
-    public void addClause(IntStream clause) {
-        clausesCNF.add(new DIMACSLiterals(clause));
+    public void addClause(DimacsLiterals clause) {
+        clausesCNF.add(Objects.requireNonNull(clause));
     }
 
     @Override
-    public void addNegatedClause(IntStream clause) {
-        Objects.requireNonNull(clause).forEachOrdered(literal -> addLiteral(-literal));
+    public void addNegatedClause(DimacsLiterals clause) {
+        Objects.requireNonNull(clause);
+        for (int l : clause.literals) {
+            addLiteral(-l);
+        }
     }
 
     @Override
     public void addLiteral(int literal) {
-        clausesCNF.add(DIMACSLiterals.of(literal));
+        clausesCNF.add(DimacsLiterals.of(literal));
     }
 
     @Override
-    public Stream<DIMACSLiterals> clauses() {
+    public Stream<DimacsLiterals> clauses() {
         return clausesCNF.stream();
     }
 

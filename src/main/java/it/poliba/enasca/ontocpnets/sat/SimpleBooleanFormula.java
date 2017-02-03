@@ -7,7 +7,7 @@ import java.util.Set;
  * A simple implementation of {@link BooleanFormula}.
  */
 class SimpleBooleanFormula extends AbstractBooleanFormula {
-    SimpleBooleanFormula(Set<DIMACSLiterals> clauses) {
+    SimpleBooleanFormula(Set<DimacsLiterals> clauses) {
         super(clauses);
     }
 

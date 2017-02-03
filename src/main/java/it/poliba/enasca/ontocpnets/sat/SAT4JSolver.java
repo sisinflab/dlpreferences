@@ -12,7 +12,6 @@ import org.sat4j.tools.ModelIterator;
 
 import java.util.Objects;
 import java.util.stream.Collector;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -76,8 +75,8 @@ public class SAT4JSolver {
      * @param problem
      * @return the satisfiable models for the input problem
      */
-    public Stream<DIMACSLiterals> solve(BooleanFormula problem) {
-        Stream<DIMACSLiterals> modelStream = models(Objects.requireNonNull(problem), MAXRESULTS_UNLIMITED);
+    public Stream<DimacsLiterals> solve(BooleanFormula problem) {
+        Stream<DimacsLiterals> modelStream = models(Objects.requireNonNull(problem), MAXRESULTS_UNLIMITED);
         return modelStream != null ? modelStream : Stream.empty();
     }
 
@@ -94,7 +93,7 @@ public class SAT4JSolver {
      * @param clause
      * @return
      */
-    public boolean implies(BooleanFormula formula, IntStream clause) {
+    public boolean implies(BooleanFormula formula, DimacsLiterals clause) {
         BooleanFormula testFormula = formula.copy();
         testFormula.addNegatedClause(clause);
         return !isSatisfiable(testFormula);
@@ -110,7 +109,7 @@ public class SAT4JSolver {
      * @return the models of the input problem, or <code>null</code> if the input problem
      * is unsatisfiable
      */
-    private Stream<DIMACSLiterals> models(BooleanFormula problem, int maxResults) {
+    private Stream<DimacsLiterals> models(BooleanFormula problem, int maxResults) {
         // Build the internal representation of the input problem.
         IVec<IVecInt> problemAsIVec = problem.clauses().collect(toIVec());
         ModelIterator solver = new ModelIterator(SolverFactory.newDefault());
@@ -124,17 +123,17 @@ public class SAT4JSolver {
             return null;
         }
         // Find models.
-        Stream.Builder<DIMACSLiterals> builder = Stream.builder();
+        Stream.Builder<DimacsLiterals> builder = Stream.builder();
         try {
             if (!solver.isSatisfiable()) {
                 return null;
             }
             if (maxResults > 0) {
-                builder.accept(new DIMACSLiterals(solver.model()));
+                builder.accept(new DimacsLiterals(solver.model()));
             }
             while ((solver.numberOfModelsFoundSoFar() < maxResults || maxResults == MAXRESULTS_UNLIMITED)
                     && solver.isSatisfiable()) {
-                builder.accept(new DIMACSLiterals(solver.model()));
+                builder.accept(new DimacsLiterals(solver.model()));
             }
         } catch (TimeoutException e) {
             throw new SATRuntimeException(e);
@@ -151,7 +150,7 @@ public class SAT4JSolver {
      * which is the representation used by the SAT4J library for collections of clauses.
      * @return
      */
-    private static Collector<DIMACSLiterals, ?, IVec<IVecInt>> toIVec() {
+    private static Collector<DimacsLiterals, ?, IVec<IVecInt>> toIVec() {
         return Collector.of(
                 Vec::new,
                 (vec, dimacs) -> vec.push(new VecInt(dimacs.literals)),

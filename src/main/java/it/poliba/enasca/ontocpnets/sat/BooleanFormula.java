@@ -5,7 +5,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -16,14 +15,14 @@ public interface BooleanFormula {
      * Adds the specified clause.
      * @param clause
      */
-    void addClause(IntStream clause);
+    void addClause(DimacsLiterals clause);
 
     /**
      * Adds the negation of the specified clause, that is,
      * the conjunction of its negated literals (De Morgan's law).
      * @param clause
      */
-    void addNegatedClause(IntStream clause);
+    void addNegatedClause(DimacsLiterals clause);
 
     /**
      * Adds a trivial clause consisting of the specified literal.
@@ -35,7 +34,7 @@ public interface BooleanFormula {
      * Returns the clauses that make up this formula.
      * @return
      */
-    Stream<DIMACSLiterals> clauses();
+    Stream<DimacsLiterals> clauses();
 
     /**
      * Returns the number of clauses in this formula.
@@ -70,7 +69,7 @@ public interface BooleanFormula {
      * Returns a <code>Collector</code> that accumulates input clauses into a new formula.
      * @return
      */
-    static Collector<DIMACSLiterals, ?, ? extends BooleanFormula> toFormula() {
+    static Collector<DimacsLiterals, ?, ? extends BooleanFormula> toFormula() {
         return Collectors.collectingAndThen(
                 Collectors.toCollection(HashSet::new),
                 SimpleBooleanFormula::new);
@@ -81,9 +80,9 @@ public interface BooleanFormula {
      * thread-safe implementation of <code>BooleanFormula</code>.
      * @return
      */
-    static Collector<DIMACSLiterals, ?, ? extends BooleanFormula> toSynchronizedFormula() {
+    static Collector<DimacsLiterals, ?, ? extends BooleanFormula> toSynchronizedFormula() {
         return Collector.of(
-                () -> Collections.<DIMACSLiterals>synchronizedSet(new HashSet<>()),
+                () -> Collections.<DimacsLiterals>synchronizedSet(new HashSet<>()),
                 Set::add,
                 (left, right) -> { left.addAll(right); return left; },
                 SynchronizedBooleanFormula::new,
