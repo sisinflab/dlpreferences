@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.sat;
+package it.poliba.enasca.ontocpnets;
 
 import java.util.Map;
 import java.util.Objects;

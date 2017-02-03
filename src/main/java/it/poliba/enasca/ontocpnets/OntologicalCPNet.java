@@ -4,7 +4,9 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Sets;
 import exception.PreferenceReasonerException;
-import it.poliba.enasca.ontocpnets.sat.*;
+import it.poliba.enasca.ontocpnets.sat.BooleanFormula;
+import it.poliba.enasca.ontocpnets.sat.DimacsLiterals;
+import it.poliba.enasca.ontocpnets.sat.SAT4JSolver;
 import it.poliba.enasca.ontocpnets.util.Lazy;
 import it.poliba.enasca.ontocpnets.util.LogicalSortedForest;
 import model.Outcome;
@@ -28,18 +30,18 @@ import java.util.stream.Stream;
 public class OntologicalCPNet extends CPNet {
 
     /**
-     * Stores equivalent representations of the preference domain entities that were added to the base ontology.
-     */
-    DomainTable domainTable;
-
-    /**
      * The augmented ontology, constructed by adding preference domain entities to the base ontology.
      */
     OWLOntology ontology;
 
     /**
+     * Stores equivalent representations of the preference domain entities that were added to the base ontology.
+     */
+    private DomainTable domainTable;
+
+    /**
      * The SAT solver used internally to find satisfiable models for collections of ontological constraints,
-     * such as {@link PreferenceGraph#getOptimumSet()} and {@link #getClosure()}.
+     * such as {@link PreferenceGraph#getOptimalityConstraints()} and {@link #getFeasibilityConstraints()}.
      */
     private SAT4JSolver solver;
 
@@ -49,7 +51,7 @@ public class OntologicalCPNet extends CPNet {
      * specified in {@link DomainTable#table}. A negative integer indicates
      * the complement of the corresponding domain value.
      */
-    private Lazy<Set<FeasibilityConstraint>> closure;
+    private Lazy<OntologicalConstraints> closure;
 
     private OntologicalCPNet(Builder builder) {
         super(builder.baseCPNet);
@@ -59,53 +61,89 @@ public class OntologicalCPNet extends CPNet {
         closure = new Lazy<>(this::computeClosure);
     }
 
-    public Set<FeasibilityConstraint> getClosure() {
+    /**
+     * Retrieves the set of constraints that must be satisfied by undominated outcomes.
+     * @return
+     */
+    public OntologicalConstraints getOptimalityConstraints() {
+        return toOntologicalConstraints(graph.getOptimalityConstraints());
+    }
+
+    /**
+     * Retrieves the ontological closure, that is the set of constraints
+     * that must be satisfied by feasible outcomes.
+     * @return
+     */
+    public OntologicalConstraints getFeasibilityConstraints() {
         return closure.getOrCompute();
     }
 
     /**
-     * Computes the optimal outcomes using the ontological variant of the HARD-PARETO algorithm.
+     * Wraps the specified <code>Constraint</code>s in an
+     * <code>OntologicalConstraints</code> instance.
+     * @param constraints
      * @return
-     * @throws IOException if an internal call to {@link #dominates(Outcome, Outcome)} results in an <code>IOException</code>
+     * @see #getOptimalityConstraints()
+     * @see #getFeasibilityConstraints()
      */
-    public Set<Outcome> hardPareto() throws IOException {
-        Set<DimacsLiterals> undominatedModels, feasibleModels, optimalModels;
-        // Solve the optimum set and the ontological closure as boolean problems.
-        undominatedModels = solveConstraints(graph.getOptimumSet().stream())
+    public OntologicalConstraints toOntologicalConstraints(Set<? extends Constraint> constraints) {
+        return new OntologicalConstraints(
+                constraints, domainTable, ontology.getOWLOntologyManager().getOWLDataFactory());
+    }
+
+    /**
+     * Computes the Pareto optimal outcomes using the ontological variant of the HARD-PARETO algorithm.
+     * @return
+     * @throws IOException if an internal call to {@link #dominates(Outcome, Outcome)}
+     * results in an <code>IOException</code>
+     */
+    public Set<Outcome> paretoOptimal() throws IOException {
+        OntologicalConstraints optimalityConstraints = getOptimalityConstraints();
+        OntologicalConstraints feasibilityConstraints = getFeasibilityConstraints();
+        OntologicalConstraints paretoOptimalityConstraints =
+                toOntologicalConstraints(Sets.union(
+                        optimalityConstraints.constraintSet,
+                        feasibilityConstraints.constraintSet));
+        Set<DimacsLiterals> undominatedModels, feasibleModels, paretoOptimalModels;
+        // Solve the constraints as boolean problems.
+        undominatedModels = solveConstraints(optimalityConstraints)
                 .collect(Collectors.toSet());
-        feasibleModels = solveConstraints(getClosure().stream())
+        feasibleModels = solveConstraints(feasibilityConstraints)
                 .collect(Collectors.toSet());
-        optimalModels = solveConstraints(
-                Stream.concat(
-                        graph.getOptimumSet().stream(),
-                        getClosure().stream()))
+        paretoOptimalModels = solveConstraints(paretoOptimalityConstraints)
                 .collect(Collectors.toSet());
         Set<Outcome> feasibleOutcomes = feasibleModels.stream()
                 .map(this::interpretModel)
                 .collect(Collectors.toSet());
-        Set<Outcome> optimalOutcomes = optimalModels.stream()
+        Set<Outcome> paretoOptimalOutcomes = paretoOptimalModels.stream()
                 .map(this::interpretModel)
-                .collect(Collectors.toSet());
-        // Find the set of optimal (feasible + undominated) outcomes.
-        if (optimalModels.equals(feasibleModels) ||
-                (!undominatedModels.isEmpty() && optimalModels.equals(undominatedModels))) {
-            return optimalOutcomes;
+                .collect(Collectors.toCollection(HashSet::new));
+        // Check trivial conditions.
+        if (paretoOptimalModels.equals(feasibleModels) ||
+                (!undominatedModels.isEmpty() && paretoOptimalModels.equals(undominatedModels))) {
+            return ImmutableSet.copyOf(paretoOptimalOutcomes);
         }
-        Stream.Builder<Outcome> additionalOptimal = Stream.builder();
-        for (Outcome unverified : Sets.difference(feasibleOutcomes, optimalOutcomes)) {
+        // Compute the set of unverified outcomes, that is the set of feasible, non-optimal outcomes.
+        Sets.SetView<Outcome> unverifiedOutcomes =
+                Sets.difference(feasibleOutcomes, paretoOptimalOutcomes);
+        // Search among unverified outcomes for additional Pareto optimal outcomes.
+        for (Outcome unverified : unverifiedOutcomes) {
             boolean isDominated = false;
-            for (Iterator<Outcome> i = feasibleOutcomes.iterator(); i.hasNext() && !isDominated; ) {
-                try {
-                    isDominated = dominates(i.next(), unverified);
-                } catch (PreferenceReasonerException e) {
-                    throw new IllegalStateException("invalid Outcome object", e);
+            Iterator<Outcome> feasibleIter = feasibleOutcomes.iterator();
+            try {
+                // Check whether the current unverified outcome is dominated by some feasible outcome.
+                while (feasibleIter.hasNext() && !isDominated) {
+                    isDominated = dominates(feasibleIter.next(), unverified);
                 }
+            } catch (PreferenceReasonerException e) {
+                throw new IllegalStateException("invalid Outcome object", e);
             }
+            // If the current unverified outcome is undominated among feasible outcomes, it is optimal.
             if (!isDominated) {
-                additionalOptimal.accept(unverified);
+                paretoOptimalOutcomes.add(unverified);
             }
         }
-        return Sets.union(optimalOutcomes, additionalOptimal.build().collect(Collectors.toSet()));
+        return ImmutableSet.copyOf(paretoOptimalOutcomes);
     }
 
     /**
@@ -117,7 +155,7 @@ public class OntologicalCPNet extends CPNet {
         return new Builder(baseCPNet);
     }
 
-    private Set<FeasibilityConstraint> computeClosure() {
+    private OntologicalConstraints computeClosure() {
         LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().stream()
                 .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
         ClosureBuilder closureBuilder = new ClosureBuilder();
@@ -134,10 +172,8 @@ public class OntologicalCPNet extends CPNet {
      * @param constraints
      * @return
      */
-    private Stream<DimacsLiterals> solveConstraints(Stream<? extends Constraint> constraints) {
-        BooleanFormula formula = constraints
-                .map(constraint -> constraint.asClause(domainTable))
-                .collect(BooleanFormula.toFormula());
+    private Stream<DimacsLiterals> solveConstraints(OntologicalConstraints constraints) {
+        BooleanFormula formula = constraints.clauses().collect(BooleanFormula.toFormula());
         return solver.solve(formula);
     }
 
@@ -187,12 +223,12 @@ public class OntologicalCPNet extends CPNet {
     private class ClosureBuilder {
         private Set<FeasibilityConstraint> closure;
         private BooleanFormula closureAsFormula;
-        private OWLDataFactory owlDataFactory;
+        private OWLDataFactory concurrentDataFactory;
 
         public ClosureBuilder() {
             closure = Collections.synchronizedSet(new HashSet<>());
             closureAsFormula = BooleanFormula.emptySynchronized();
-            owlDataFactory = OWLManager.createConcurrentOWLOntologyManager().getOWLDataFactory();
+            concurrentDataFactory = OWLManager.createConcurrentOWLOntologyManager().getOWLDataFactory();
         }
 
         /**
@@ -216,7 +252,7 @@ public class OntologicalCPNet extends CPNet {
             OWLReasoner ontologyReasoner = new ReasonerFactory().createReasoner(ontology);
             // Check whether the current branch axiom is entailed by the ontology.
             FeasibilityConstraint constraint = new FeasibilityConstraint(branchClause, domainTable);
-            OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(owlDataFactory, domainTable);
+            OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(concurrentDataFactory, domainTable);
             boolean isEntailed = ontologyReasoner.isEntailed(branchAxiom);
             ontologyReasoner.dispose();
             if (isEntailed) {
@@ -230,8 +266,8 @@ public class OntologicalCPNet extends CPNet {
          * Returns an immutable <code>Set</code> containing the constraints collected so far.
          * @return
          */
-        public Set<FeasibilityConstraint> build() {
-            return ImmutableSet.copyOf(closure);
+        public OntologicalConstraints build() {
+            return toOntologicalConstraints(closure);
         }
 
     }
@@ -240,8 +276,7 @@ public class OntologicalCPNet extends CPNet {
      * Stores equivalent representations of the preference domain elements that were
      * added to the base ontology.
      */
-    static class DomainTable implements
-            DimacsProvider, VarNameProvider, IRIProvider {
+    private static class DomainTable implements ModelConverter {
 
         /**
          * Stores equivalent representations of the preference domain elements

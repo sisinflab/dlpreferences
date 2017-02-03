@@ -57,7 +57,7 @@ public class PreferenceGraph {
      * Retrieves the set of constraints that must be satisfied by the undominated outcomes.
      * @return
      */
-    public Set<OptimalityConstraint> getOptimumSet() {
+    public Set<OptimalityConstraint> getOptimalityConstraints() {
         return nodeMap.values().stream()
                 .flatMap(node -> node.optimum.stream())
                 .collect(Collectors.toSet());

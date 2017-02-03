@@ -68,6 +68,7 @@ public interface BooleanFormula {
     /**
      * Returns a <code>Collector</code> that accumulates input clauses into a new formula.
      * @return
+     * @see SAT4JSolver#solve(BooleanFormula)
      */
     static Collector<DimacsLiterals, ?, ? extends BooleanFormula> toFormula() {
         return Collectors.collectingAndThen(
@@ -79,6 +80,7 @@ public interface BooleanFormula {
      * Returns a <code>Collector</code> that accumulates input clauses into a
      * thread-safe implementation of <code>BooleanFormula</code>.
      * @return
+     * @see SAT4JSolver#solve(BooleanFormula)
      */
     static Collector<DimacsLiterals, ?, ? extends BooleanFormula> toSynchronizedFormula() {
         return Collector.of(

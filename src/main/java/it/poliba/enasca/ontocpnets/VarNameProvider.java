@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.sat;
+package it.poliba.enasca.ontocpnets;
 
 /**
  * A function that converts integer DIMACS literals into <code>String</code>s

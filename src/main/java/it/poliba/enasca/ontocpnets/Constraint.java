@@ -1,7 +1,6 @@
 package it.poliba.enasca.ontocpnets;
 
 import it.poliba.enasca.ontocpnets.sat.DimacsLiterals;
-import it.poliba.enasca.ontocpnets.sat.DimacsProvider;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLDataFactory;

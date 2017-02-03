@@ -28,14 +28,14 @@ public class OntologicalCPNetTest {
     private OntologicalCPNet cpnet;
     private ImmutableSetMultimap<String, String> preferenceVariables;
     private OWLOntology augmented;
-    private Set<OptimalityConstraint> optimumSet;
+    private Set<OptimalityConstraint> optimalityConstraints;
     private Set<FeasibilityConstraint> closure;
     private Set<Map<String, String>> outcomesAsMaps;
 
     @Factory(dataProvider = "factoryProvider")
     public OntologicalCPNetTest(Path xmlPrefSpec, Path baseOntologyPath, Path augmentedOntologyPath,
                                 ImmutableSetMultimap<String, String> preferenceVariables,
-                                Stream<OptimalityConstraint> optimum,
+                                Stream<OptimalityConstraint> optimalityStream,
                                 Stream<FeasibilityConstraint> closure,
                                 Stream<Map<String, String>> outcomesAsMaps)
             throws Exception {
@@ -58,7 +58,7 @@ public class OntologicalCPNetTest {
         this.cpnet = cpnetBuilder.build();
         this.preferenceVariables = preferenceVariables;
         this.augmented = augmentedOntology;
-        this.optimumSet = optimum.collect(Collectors.toSet());
+        this.optimalityConstraints = optimalityStream.collect(Collectors.toSet());
         this.closure = closure.collect(Collectors.toSet());
         this.outcomesAsMaps = outcomesAsMaps.collect(Collectors.toSet());
     }
@@ -81,7 +81,7 @@ public class OntologicalCPNetTest {
                         .putAll("P", "Pl", "Ps")
                         .build();
         // The optimality constraints.
-        Stream<OptimalityConstraint> hotelOptimum = Stream.<OptimalityConstraint>builder()
+        Stream<OptimalityConstraint> hotelOptimalityStream = Stream.<OptimalityConstraint>builder()
                 .add(OptimalityConstraint.builder()
                         .addToClause("Rl")
                         .build())
@@ -170,7 +170,7 @@ public class OntologicalCPNetTest {
                 .build();
         return new Object[][]{
                 {hotelXMLPrefSpec, hotelBaseOntology, hotelAugmentedOntology,
-                        hotelPreferenceVariables, hotelOptimum, hotelClosure, hotelOutcomes}
+                        hotelPreferenceVariables, hotelOptimalityStream, hotelClosure, hotelOutcomes}
         };
     }
 
@@ -193,14 +193,16 @@ public class OntologicalCPNetTest {
 
     @Test
     public void testComputeOptimum() throws Exception {
-        Set<OptimalityConstraint> cpnetOptimum = cpnet.getPreferenceGraph().getOptimumSet();
-        Assert.assertEquals(cpnetOptimum, optimumSet,
-                Utils.reportSetDifference(cpnetOptimum, optimumSet));
+        Set<? extends Constraint> cpnetOptimalityConstraints =
+                cpnet.getOptimalityConstraints().constraintSet;
+        Assert.assertEquals(cpnetOptimalityConstraints, optimalityConstraints,
+                Utils.reportSetDifference(cpnetOptimalityConstraints, optimalityConstraints));
     }
 
     @Test
     public void testComputeClosure() throws Exception {
-        Set<FeasibilityConstraint> cpnetClosure = cpnet.getClosure();
+        Set<? extends Constraint> cpnetClosure =
+                cpnet.getFeasibilityConstraints().constraintSet;
         Assert.assertEquals(cpnetClosure, closure,
                 Utils.reportSetDifference(cpnetClosure, closure));
     }
@@ -208,7 +210,7 @@ public class OntologicalCPNetTest {
     @Test
     public void testHardPareto() throws Exception {
         Set<Map<String, String>> hardParetoOutcomes =
-                cpnet.hardPareto().stream()
+                cpnet.paretoOptimal().stream()
                         .map(Outcome::getOutcomeAsValuationMap)
                         .collect(Collectors.toSet());
         Assert.assertEquals(hardParetoOutcomes, outcomesAsMaps,

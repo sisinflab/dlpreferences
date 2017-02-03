@@ -1,5 +1,7 @@
 package it.poliba.enasca.ontocpnets.sat;
 
+import it.poliba.enasca.ontocpnets.VarNameProvider;
+
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;

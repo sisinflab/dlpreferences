@@ -2,7 +2,6 @@ package it.poliba.enasca.ontocpnets;
 
 import com.google.common.collect.ImmutableMap;
 import it.poliba.enasca.ontocpnets.sat.DimacsLiterals;
-import it.poliba.enasca.ontocpnets.sat.VarNameProvider;
 import it.poliba.enasca.ontocpnets.util.StreamBasedBuilder;
 import org.semanticweb.owlapi.model.OWLDataFactory;
 
