@@ -155,6 +155,22 @@ public class OntologicalCPNet extends CPNet {
         return new Builder(baseCPNet);
     }
 
+    /**
+     * Checks whether <code>axiom</code> is entailed by {@link #ontology}.
+     *
+     * <p>This method is <em>stateless</em>: on each invocation,
+     * a new {@link org.semanticweb.owlapi.reasoner.OWLReasoner} instance
+     * performs the entailment check, then is immediately disposed of.
+     * @param axiom
+     * @return
+     */
+    boolean entails(OWLAxiom axiom) {
+        OWLReasoner reasoner = new ReasonerFactory().createReasoner(ontology);
+        boolean result = reasoner.isEntailed(axiom);
+        reasoner.dispose();
+        return result;
+    }
+
     private OntologicalConstraints computeClosure() {
         LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().stream()
                 .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
@@ -248,18 +264,15 @@ public class OntologicalCPNet extends CPNet {
             if (solver.implies(closureAsFormula, branchClause)) {
                 return true;
             }
-            // Since the HermiT reasoner does not support concurrency, a fresh instance must be created.
-            OWLReasoner ontologyReasoner = new ReasonerFactory().createReasoner(ontology);
-            // Check whether the current branch axiom is entailed by the ontology.
+            // Check whether the augmented ontology entails the current branch axiom.
             FeasibilityConstraint constraint = new FeasibilityConstraint(branchClause, domainTable);
             OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(concurrentDataFactory, domainTable);
-            boolean isEntailed = ontologyReasoner.isEntailed(branchAxiom);
-            ontologyReasoner.dispose();
-            if (isEntailed) {
+            if (entails(branchAxiom)) {
                 closure.add(constraint);
                 closureAsFormula.addClause(branchClause);
+                return true;
             }
-            return isEntailed;
+            return false;
         }
 
         /**

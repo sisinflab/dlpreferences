@@ -1,7 +1,9 @@
 package it.poliba.enasca.ontocpnets;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
+import com.google.common.collect.Sets;
 import it.poliba.enasca.ontocpnets.util.NuSMVRunnerTest;
 import model.Outcome;
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -14,6 +16,7 @@ import org.testng.annotations.Test;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.UnaryOperator;
@@ -199,12 +202,33 @@ public class OntologicalCPNetTest {
                 Utils.reportSetDifference(cpnetOptimalityConstraints, optimalityConstraints));
     }
 
+    /**
+     * Checks whether the axioms in the ontological closure satisfy the condition of minimal clause,
+     * that is for each axiom
+     * <pre>{@code SubClassOf(owl:Thing, ObjectUnionOf(X, Y, ...)) }</pre>
+     * there exists no strict subset <em>Q</em> of <em>{X, Y, ...}</em> such that
+     * <em>Q</em> is entailed by the augmented ontology.
+     * @throws Exception
+     */
     @Test
     public void testComputeClosure() throws Exception {
-        Set<? extends Constraint> cpnetClosure =
-                cpnet.getFeasibilityConstraints().constraintSet;
-        Assert.assertEquals(cpnetClosure, closure,
-                Utils.reportSetDifference(cpnetClosure, closure));
+        OntologicalConstraints closure = cpnet.getFeasibilityConstraints();
+        OWLDataFactory df = OWLManager.createConcurrentOWLOntologyManager().getOWLDataFactory();
+        closure.axioms().parallel()
+                // Retrieve the set of disjunct OWL classes from the current covering axiom.
+                .map(axiom -> axiom.getSubClass().asDisjunctSet())
+                // Compute the powerset, excluding the empty set and the original set.
+                .map(clause -> Sets.difference(
+                        Sets.powerSet(clause),
+                        ImmutableSet.<Set<OWLClassExpression>>of(Collections.emptySet(), clause)))
+                .flatMap(Collection::parallelStream)
+                // Create a covering axiom from the current subset.
+                .map(subset -> df.getOWLSubClassOfAxiom(
+                        df.getOWLThing(),
+                        df.getOWLObjectUnionOf(subset)))
+                // Assert that the new covering axiom is not entailed by the augmented ontology.
+                .forEach(axiom -> Assert.assertFalse(cpnet.entails(axiom),
+                        String.format("the axiom %s is entailed by the augmented ontology", axiom)));
     }
 
     @Test
