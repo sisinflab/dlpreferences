@@ -18,6 +18,7 @@ import org.semanticweb.owlapi.model.parameters.ChangeApplied;
 import org.semanticweb.owlapi.model.parameters.OntologyCopy;
 import org.semanticweb.owlapi.rdf.rdfxml.parser.IRIProvider;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
+import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
 import java.io.IOException;
 import java.util.*;
@@ -48,6 +49,12 @@ public class OntologicalCPNet extends CPNet {
     private SAT4JSolver solver;
 
     /**
+     * The factory object that creates {@link OWLReasoner} instances
+     * when reasoning services are required.
+     */
+    private OWLReasonerFactory reasonerFactory;
+
+    /**
      * The ontological closure, wrapped in a lazy initializer.
      */
     private Lazy<OntologicalConstraints> closure;
@@ -61,6 +68,7 @@ public class OntologicalCPNet extends CPNet {
         super(builder.baseCPNet);
         domainTable = new Table(builder);
         solver = new SAT4JSolver(domainTable.size());
+        reasonerFactory = builder.reasonerFactory;
         closure = new Lazy<>(this::computeClosure);
         // Build a mapping between domain values and their OWL representations.
         OWLDataFactory dataFactory = builder.baseOntology.getOWLOntologyManager().getOWLDataFactory();
@@ -88,7 +96,7 @@ public class OntologicalCPNet extends CPNet {
             throw new OWLRuntimeException("error while applying changes to the new ontology");
         }
         // Check the augmented ontology for consistency.
-        OWLReasoner reasoner = new ReasonerFactory().createNonBufferingReasoner(ontology);
+        OWLReasoner reasoner = reasonerFactory.createReasoner(ontology);
         boolean arePrefsConsistent = reasoner.isConsistent();
         reasoner.dispose();
         if (!arePrefsConsistent) {
@@ -182,12 +190,23 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Returns a builder that builds an {@link OntologicalCPNet} upon the specified {@link CPNet}.
-     * @param baseCPNet the base object that will be used when constructing the {@link OntologicalCPNet} instance
+     * Returns a builder that builds an <code>OntologicalCPNet</code>
+     * upon the specified <code>CPNet</code> and base ontology.
+     * Any changes to <code>baseOntology</code> applied before invoking {@link Builder#build()}
+     * will take effect.
+     *
+     * <p>The specified base ontology must be consistent and <em>named</em>
+     * (that is, <code>baseOntology.getOntologyID().isAnonymous()</code> must return <code>false</code>);
+     * if either condition is not satisfied, {@link Builder#build()}
+     * will throw an {@link IllegalStateException}.
+     * @param baseCPNet the parent object of the <code>OntologicalCPNet</code> instance to build
+     * @param baseOntology
      * @return
      */
-    public static Builder builder(CPNet baseCPNet) {
-        return new Builder(baseCPNet);
+    public static Builder builder(CPNet baseCPNet, OWLOntology baseOntology) {
+        Objects.requireNonNull(baseCPNet);
+        Objects.requireNonNull(baseOntology);
+        return new Builder(baseCPNet, baseOntology);
     }
 
     /**
@@ -200,7 +219,7 @@ public class OntologicalCPNet extends CPNet {
      * @return
      */
     boolean entails(OWLAxiom axiom) {
-        OWLReasoner reasoner = new ReasonerFactory().createReasoner(ontology);
+        OWLReasoner reasoner = reasonerFactory.createReasoner(ontology);
         boolean result = reasoner.isEntailed(axiom);
         reasoner.dispose();
         return result;
@@ -354,7 +373,8 @@ public class OntologicalCPNet extends CPNet {
          * @param builder
          */
         private Table(Builder builder) {
-            String baseIRIString = builder.baseOntology.getOntologyID().getOntologyIRI()
+            OWLOntologyID baseOntologyID = builder.baseOntology.getOntologyID();
+            String baseIRIString = baseOntologyID.getOntologyIRI()
                     .orElseThrow(() -> new IllegalStateException("base ontology cannot be anonymous"))
                     .getIRIString();
             Set<IRI> existingIRIs = builder.baseOntology.classesInSignature()
@@ -438,41 +458,42 @@ public class OntologicalCPNet extends CPNet {
     public static class Builder {
         // constants
         private static final String[] DISAMBIGUATION_SUFFIXES = {"", "_pref", "_user", "_aug"};
-        // required parameters for the OntologicalCPNet instance
+        // parameters for the OntologicalCPNet instance to build
         private CPNet baseCPNet;
-        // build parameters
+        private OWLReasonerFactory reasonerFactory;
+        // temporary variables for the building process
         private Set<String> domainValues;
         private OWLOntology baseOntology;
         private Map<String, OWLClassExpression> definitions;
 
-        private Builder(CPNet baseCPNet) {
-            this.baseCPNet = Objects.requireNonNull(baseCPNet);
+        private Builder(CPNet baseCPNet, OWLOntology baseOntology) {
+            this.baseCPNet = baseCPNet;
+            this.baseOntology = baseOntology;
             definitions = new HashMap<>();
             domainValues = this.baseCPNet.graph.domainValues().collect(Collectors.toSet());
-            baseOntology = null;
+            reasonerFactory = null;
         }
 
         /**
-         * Sets the specified ontology as the base ontology for the {@link OntologicalCPNet} being built.
-         * Any changes to the ontology applied before invoking {@link #build()} will take effect.
+         * Sets the specified factory object for creating {@link OWLReasoner} instances.
          *
-         * <p>The specified ontology must be consistent and <em>named</em>
-         * (that is, <code>baseOntology.getOntologyID()</code> must return <code>false</code>);
-         * if either condition is not satisfied, {@link #build()} will throw an {@link IllegalStateException}.
-         * @param baseOntology
+         * <p>The factory object is an optional parameter for the {@link OntologicalCPNet} to build.
+         * If this method is not invoked before {@link #build()}, a default value will be used.
+         * @param factory
          * @return
-         * @throws IllegalStateException if a base ontology was already set for this builder
+         * @throws IllegalStateException if a factory object was already set for this builder
          */
-        public Builder withOntology(OWLOntology baseOntology) {
-            if (this.baseOntology != null) throw new IllegalStateException();
-            this.baseOntology = Objects.requireNonNull(baseOntology);
+        public Builder withReasonerFactory(OWLReasonerFactory factory) {
+            if (this.reasonerFactory != null) throw new IllegalStateException();
+            this.reasonerFactory = Objects.requireNonNull(factory);
             return this;
         }
 
         /**
-         * OWL class definitions are required parameters. This method must be invoked for each element
-         * returned by <code>getPreferenceGraph().domainValues()</code>, otherwise {@link #build()}
-         * will throw an {@link IllegalStateException}.
+         * OWL class definitions are required parameters for the {@link OntologicalCPNet} to build.
+         * This method must be invoked for each element
+         * returned by <code>getPreferenceGraph().domainValues()</code>,
+         * otherwise {@link #build()} will throw an {@link IllegalStateException}.
          * @param domainValue
          * @param definition
          * @return
@@ -527,8 +548,12 @@ public class OntologicalCPNet extends CPNet {
             if (!domainValues.equals(definitions.keySet())) {
                 throw new IllegalStateException("missing OWL definition for some domain values");
             }
+            // Check optional parameters.
+            if (reasonerFactory == null) {
+                reasonerFactory = new ReasonerFactory();
+            }
             // Check the base ontology for consistency.
-            OWLReasoner reasoner = new ReasonerFactory().createReasoner(baseOntology);
+            OWLReasoner reasoner = reasonerFactory.createReasoner(baseOntology);
             boolean isBaseConsistent = reasoner.isConsistent();
             reasoner.dispose();
             if (!isBaseConsistent) {

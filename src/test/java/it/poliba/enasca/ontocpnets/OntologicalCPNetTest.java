@@ -53,8 +53,7 @@ public class OntologicalCPNetTest {
                 collectOntologicalPreferences(augmentedOntology, preferenceVariables.values().stream());
         // Build the current OntologicalCPNet instance.
         CPNet baseCPNet = new CPNet(xmlPrefSpec, Paths.get(NuSMVRunnerTest.NUSMV_EXECUTABLE.toURI()));
-        OntologicalCPNet.Builder cpnetBuilder = OntologicalCPNet.builder(baseCPNet);
-        cpnetBuilder.withOntology(baseOntology);
+        OntologicalCPNet.Builder cpnetBuilder = OntologicalCPNet.builder(baseCPNet, baseOntology);
         for (Map.Entry<String, OWLClassExpression> preferenceEntry : preferences.entrySet()) {
             cpnetBuilder.addPreferenceDefinition(preferenceEntry.getKey(), preferenceEntry.getValue());
         }
