@@ -1,5 +1,6 @@
 package it.poliba.enasca.ontocpnets;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Sets;
@@ -21,8 +22,8 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 import java.io.IOException;
 import java.util.*;
 import java.util.function.Function;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -38,7 +39,7 @@ public class OntologicalCPNet extends CPNet {
     /**
      * Stores equivalent representations of the preference domain entities that were added to the base ontology.
      */
-    private DomainTable domainTable;
+    Table domainTable;
 
     /**
      * The SAT solver used internally to find satisfiable models for collections of ontological constraints,
@@ -51,12 +52,48 @@ public class OntologicalCPNet extends CPNet {
      */
     private Lazy<OntologicalConstraints> closure;
 
-    private OntologicalCPNet(Builder builder) {
+    /**
+     * @param builder
+     * @throws OWLOntologyCreationException if the base ontology cannot be copied into
+     * a local {@link OWLOntologyManager} to create the augmented ontology.
+     */
+    private OntologicalCPNet(Builder builder) throws OWLOntologyCreationException {
         super(builder.baseCPNet);
-        domainTable = builder.domainTable;
-        ontology = builder.augmentedOntology;
+        domainTable = new Table(builder);
         solver = new SAT4JSolver(domainTable.size());
         closure = new Lazy<>(this::computeClosure);
+        // Build a mapping between domain values and their OWL representations.
+        OWLDataFactory dataFactory = builder.baseOntology.getOWLOntologyManager().getOWLDataFactory();
+        Map<String, OWLClass> owlDomainValues = builder.domainValues.stream()
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        domainValue -> dataFactory.getOWLClass(domainTable.getIRI(domainValue))));
+        // Build the new class definition axioms.
+        Stream<OWLEquivalentClassesAxiom> classDefinitions = builder.domainValues.stream()
+                .map(domainValue -> dataFactory.getOWLEquivalentClassesAxiom(
+                        owlDomainValues.get(domainValue),
+                        builder.definitions.get(domainValue)));
+        // Build the new partition axioms.
+        Stream<OWLDisjointUnionAxiom> partitions = graph.domainMap()
+                .values().stream()
+                .map(domain -> dataFactory.getOWLDisjointUnionAxiom(
+                        dataFactory.getOWLThing(),
+                        domain.stream().map(owlDomainValues::get)));
+        // Copy the base ontology into a local manager.
+        ontology = OWLManager.createOWLOntologyManager()
+                .copyOntology(builder.baseOntology, OntologyCopy.SHALLOW);
+        // Add the new axioms to the augmented ontology.
+        if (ontology.addAxioms(Stream.concat(classDefinitions, partitions))
+                != ChangeApplied.SUCCESSFULLY) {
+            throw new OWLRuntimeException("error while applying changes to the new ontology");
+        }
+        // Check the augmented ontology for consistency.
+        OWLReasoner reasoner = new ReasonerFactory().createNonBufferingReasoner(ontology);
+        boolean arePrefsConsistent = reasoner.isConsistent();
+        reasoner.dispose();
+        if (!arePrefsConsistent) {
+            throw new IllegalStateException("inconsistent set of preferences");
+        }
     }
 
     /**
@@ -154,7 +191,7 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Checks whether <code>axiom</code> is entailed by {@link #ontology}.
+     * Checks whether the specified axiom is entailed by {@link #ontology}.
      *
      * <p>This method is <em>stateless</em>: on each invocation,
      * a new {@link org.semanticweb.owlapi.reasoner.OWLReasoner} instance
@@ -284,22 +321,21 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Stores equivalent representations of the preference domain elements that were
-     * added to the base ontology.
+     * An equivalency table that stores different representations of user preferences.
      */
-    public static class DomainTable implements ModelConverter {
+    public class Table implements ModelConverter {
 
         /**
-         * Stores equivalent representations of the preference domain elements
-         * that were added to the base ontology. Specifically:
+         * Contains equivalent representations of user preferences.
+         * Specifically:
          * <ul>
          *     <li>rows contain the string identifiers found in the preference specification file;</li>
          *     <li>columns contain positive integers, for use as DIMACS literals in boolean satisfiability problems;</li>
-         *     <li>values contain <code>IRI</code>s.</li>
+         *     <li>values contain the <code>IRI</code>s of the OWL classes that were added to the base ontology.</li>
          * </ul>
          *
          * <p>For example, consider the preference variables <i>A</i> and <i>B</i>, with domain values
-         * <i>a1, a2, a3</i> and <i>b1, b2</i>, respectively. The corresponding table might be:
+         * <i>a1, a2, a3</i> and <i>b1, b2</i>, respectively. The corresponding table has the form:
          * <pre>{@code
          * "a1" <-> 1 -> "http://www.semanticweb.org/myname/myontology#a1"
          * "a2" <-> 2 -> "http://www.semanticweb.org/myname/myontology#a2"
@@ -311,29 +347,32 @@ public class OntologicalCPNet extends CPNet {
         private ImmutableTable<String, Integer, IRI> table;
 
         /**
-         * Constructs a new <code>DomainTable</code> by associating the elements from the
-         * specified <code>Iterable</code> with values obtained by applying <code>converter</code>.
-         *
-         * <p>Each <code>String</code> from <code>elements</code> is associated with two values:
-         * <ul>
-         *     <li>the <code>IRI</code> obtained by applying <code>converter</code>;</li>
-         *     <li>an automatically generated DIMACS literal.</li>
-         * </ul>
-         *
-         * DIMACS literals are generated starting from <code>1</code> and counting
-         * in the input order, ignoring duplicates.
-         * @param converter
-         * @return
+         * Constructs a <code>Table</code> by generating a unique {@link IRI}
+         * for each element of {@link Builder#domainValues}.
+         * A disambiguation policy is applied when a generated <code>IRI</code> clashes
+         * with an existing <code>IRI</code> in the base ontology.
+         * @param builder
          */
-        DomainTable(Iterable<String> elements, IRIProvider converter) {
-            Objects.requireNonNull(elements);
-            Objects.requireNonNull(converter);
-            ImmutableTable.Builder<String, Integer, IRI> builder = ImmutableTable.builder();
-            int dimacsLiteral = 0;
-            for (String element : ImmutableSet.copyOf(elements)) {
-                builder.put(element, ++dimacsLiteral, converter.getIRI(element));
-            }
-            table = builder.build();
+        private Table(Builder builder) {
+            String baseIRIString = builder.baseOntology.getOntologyID().getOntologyIRI()
+                    .orElseThrow(() -> new IllegalStateException("base ontology cannot be anonymous"))
+                    .getIRIString();
+            Set<IRI> existingIRIs = builder.baseOntology.classesInSignature()
+                    .map(HasIRI::getIRI)
+                    .collect(Collectors.toSet());
+            IRIProvider converter = str -> Arrays.stream(Builder.DISAMBIGUATION_SUFFIXES)
+                    .map(suffix -> baseIRIString + "#" + str + suffix)
+                    .map(IRI::create)
+                    .filter(iri -> !existingIRIs.contains(iri))
+                    .findFirst().orElseThrow(() -> new IllegalStateException(
+                            String.format("Unable to generate a unique IRI for domain value '%s'", str)));
+            ImmutableList<String> domainList = ImmutableSet.copyOf(builder.domainValues).asList();
+            ImmutableTable.Builder<String, Integer, IRI> tableBuilder = ImmutableTable.builder();
+            IntStream.range(0, domainList.size()).forEachOrdered(index -> {
+                String domainValue = domainList.get(index);
+                tableBuilder.put(domainValue, index+1, converter.getIRI(domainValue));
+            });
+            table = tableBuilder.build();
         }
 
         /**
@@ -391,25 +430,6 @@ public class OntologicalCPNet extends CPNet {
             return table.size();
         }
 
-        /**
-         * Returns a <code>Collector</code> that accumulates propositional variable names
-         * into a new <code>DomainTable</code>.
-         *
-         * <p>For sequential inputs, this is equivalent to
-         * <pre>{@code
-         * List<String> l = elements.stream().collect(Collectors.toList());
-         * return new DomainTable(l, converter);
-         * }</pre>
-         * @param converter
-         * @return
-         */
-        static Collector<String, ?, DomainTable> toDomainTable(IRIProvider converter) {
-            Objects.requireNonNull(converter);
-            return Collectors.collectingAndThen(
-                    Collectors.toList(),
-                    elements -> new DomainTable(elements, converter));
-        }
-
     }
 
     /**
@@ -420,8 +440,6 @@ public class OntologicalCPNet extends CPNet {
         private static final String[] DISAMBIGUATION_SUFFIXES = {"", "_pref", "_user", "_aug"};
         // required parameters for the OntologicalCPNet instance
         private CPNet baseCPNet;
-        private OWLOntology augmentedOntology;
-        private DomainTable domainTable;
         // build parameters
         private Set<String> domainValues;
         private OWLOntology baseOntology;
@@ -431,17 +449,16 @@ public class OntologicalCPNet extends CPNet {
             this.baseCPNet = Objects.requireNonNull(baseCPNet);
             definitions = new HashMap<>();
             domainValues = this.baseCPNet.graph.domainValues().collect(Collectors.toSet());
-            domainTable = null;
             baseOntology = null;
-            augmentedOntology = null;
         }
 
         /**
          * Sets the specified ontology as the base ontology for the {@link OntologicalCPNet} being built.
          * Any changes to the ontology applied before invoking {@link #build()} will take effect.
          *
-         * <p>When {@link #build()} is invoked, <code>baseOntology</code> is checked for consistency;
-         * if the check fails, an {@link IllegalStateException} will be thrown.
+         * <p>The specified ontology must be consistent and <em>named</em>
+         * (that is, <code>baseOntology.getOntologyID()</code> must return <code>false</code>);
+         * if either condition is not satisfied, {@link #build()} will throw an {@link IllegalStateException}.
          * @param baseOntology
          * @return
          * @throws IllegalStateException if a base ontology was already set for this builder
@@ -500,7 +517,7 @@ public class OntologicalCPNet extends CPNet {
          * @return
          * @throws OWLOntologyCreationException if the base ontology cannot be copied into
          * a local {@link OWLOntologyManager} to create the augmented ontology.
-         * @throws IllegalStateException if the required parameters were not set properly
+         * @throws IllegalStateException if the required parameters are not set properly
          */
         public OntologicalCPNet build() throws OWLOntologyCreationException {
             // Check required parameters.
@@ -510,53 +527,13 @@ public class OntologicalCPNet extends CPNet {
             if (!domainValues.equals(definitions.keySet())) {
                 throw new IllegalStateException("missing OWL definition for some domain values");
             }
-            // Copy the base ontology into a local manager and check for consistency.
-            OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
-            OWLDataFactory owlDataFactory = manager.getOWLDataFactory();
-            augmentedOntology = manager.copyOntology(baseOntology, OntologyCopy.SHALLOW);
-            OWLReasoner reasoner = new ReasonerFactory().createNonBufferingReasoner(augmentedOntology);
-            if (!reasoner.isConsistent()) {
+            // Check the base ontology for consistency.
+            OWLReasoner reasoner = new ReasonerFactory().createReasoner(baseOntology);
+            boolean isBaseConsistent = reasoner.isConsistent();
+            reasoner.dispose();
+            if (!isBaseConsistent) {
                 throw new IllegalStateException("inconsistent base ontology");
             }
-            // Generate a unique IRI string for each domain value.
-            String baseIRIString = augmentedOntology.getOntologyID().getOntologyIRI()
-                    .orElse(manager.getOntologyDocumentIRI(augmentedOntology))
-                    .getIRIString();
-            Set<IRI> existingIRIs = augmentedOntology.classesInSignature()
-                    .map(HasIRI::getIRI)
-                    .collect(Collectors.toSet());
-            IRIProvider toIRIFunction = domainValue -> Arrays.stream(DISAMBIGUATION_SUFFIXES)
-                    .map(suffix -> baseIRIString + "#" + domainValue + suffix)
-                    .map(IRI::create)
-                    .filter(iri -> !existingIRIs.contains(iri))
-                    .findFirst().orElseThrow(() -> new IllegalStateException(
-                            String.format("Unable to generate a unique IRI for domain value '%s'", domainValue)));
-            domainTable = new DomainTable(domainValues, toIRIFunction);
-            // Build a mapping between domain values and their OWL representations.
-            Map<String, OWLClass> owlDomainValues = domainValues.stream()
-                    .collect(Collectors.toMap(
-                            Function.identity(),
-                            domainValue -> owlDataFactory.getOWLClass(domainTable.getIRI(domainValue))));
-            // Build the new class definition axioms.
-            Stream<OWLEquivalentClassesAxiom> classDefinitions = domainValues.stream()
-                    .map(domainValue -> owlDataFactory.getOWLEquivalentClassesAxiom(
-                            owlDomainValues.get(domainValue),
-                            definitions.get(domainValue)));
-            // Build the new partition axioms.
-            Stream<OWLDisjointUnionAxiom> partitions = baseCPNet.graph.domainMap()
-                    .values().stream()
-                    .map(domain -> owlDataFactory.getOWLDisjointUnionAxiom(
-                            owlDataFactory.getOWLThing(),
-                            domain.stream().map(owlDomainValues::get)));
-            // Add the new axioms to the augmented ontology.
-            if (augmentedOntology.addAxioms(Stream.concat(classDefinitions, partitions))
-                    != ChangeApplied.SUCCESSFULLY) {
-                throw new OWLRuntimeException("error while applying changes to the new ontology");
-            }
-            if (!reasoner.isConsistent()) {
-                throw new IllegalStateException("inconsistent set of preferences");
-            }
-            // Build the OntologicalCPNet instance.
             return new OntologicalCPNet(this);
         }
     }
