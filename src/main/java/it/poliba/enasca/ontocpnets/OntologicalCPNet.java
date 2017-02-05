@@ -21,6 +21,7 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 import java.io.IOException;
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -47,9 +48,6 @@ public class OntologicalCPNet extends CPNet {
 
     /**
      * The ontological closure, wrapped in a lazy initializer.
-     * The inner integers represent domain values, in accordance with the mappings
-     * specified in {@link DomainTable#table}. A negative integer indicates
-     * the complement of the corresponding domain value.
      */
     private Lazy<OntologicalConstraints> closure;
 
@@ -57,7 +55,7 @@ public class OntologicalCPNet extends CPNet {
         super(builder.baseCPNet);
         domainTable = builder.domainTable;
         ontology = builder.augmentedOntology;
-        solver = new SAT4JSolver(domainTable.getDimacsLiterals().size());
+        solver = new SAT4JSolver(domainTable.size());
         closure = new Lazy<>(this::computeClosure);
     }
 
@@ -289,7 +287,7 @@ public class OntologicalCPNet extends CPNet {
      * Stores equivalent representations of the preference domain elements that were
      * added to the base ontology.
      */
-    private static class DomainTable implements ModelConverter {
+    public static class DomainTable implements ModelConverter {
 
         /**
          * Stores equivalent representations of the preference domain elements
@@ -309,18 +307,31 @@ public class OntologicalCPNet extends CPNet {
          * "b1" <-> 4 -> "http://www.semanticweb.org/myname/myontology#b1"
          * "b2" <-> 5 -> "http://www.semanticweb.org/myname/myontology#b2"
          * }</pre>
-         *
-         * <p>Note that no particular order is guaranteed when assigning DIMACS literals.
          */
         private ImmutableTable<String, Integer, IRI> table;
 
-        DomainTable(Set<String> elements, Function<String, IRI> toIRI) {
+        /**
+         * Constructs a new <code>DomainTable</code> by associating the elements from the
+         * specified <code>Iterable</code> with values obtained by applying <code>converter</code>.
+         *
+         * <p>Each <code>String</code> from <code>elements</code> is associated with two values:
+         * <ul>
+         *     <li>the <code>IRI</code> obtained by applying <code>converter</code>;</li>
+         *     <li>an automatically generated DIMACS literal.</li>
+         * </ul>
+         *
+         * DIMACS literals are generated starting from <code>1</code> and counting
+         * in the input order, ignoring duplicates.
+         * @param converter
+         * @return
+         */
+        DomainTable(Iterable<String> elements, IRIProvider converter) {
             Objects.requireNonNull(elements);
-            Objects.requireNonNull(toIRI);
+            Objects.requireNonNull(converter);
             ImmutableTable.Builder<String, Integer, IRI> builder = ImmutableTable.builder();
             int dimacsLiteral = 0;
-            for (String element : elements) {
-                builder.put(element, ++dimacsLiteral, toIRI.apply(element));
+            for (String element : ImmutableSet.copyOf(elements)) {
+                builder.put(element, ++dimacsLiteral, converter.getIRI(element));
             }
             table = builder.build();
         }
@@ -369,6 +380,34 @@ public class OntologicalCPNet extends CPNet {
          */
         public Set<Integer> getDimacsLiterals() {
             return table.columnKeySet();
+        }
+
+        /**
+         * Returns the number of mappings in this table.
+         * The return value is also equal to the highest DIMACS literal.
+         * @return
+         */
+        public int size() {
+            return table.size();
+        }
+
+        /**
+         * Returns a <code>Collector</code> that accumulates propositional variable names
+         * into a new <code>DomainTable</code>.
+         *
+         * <p>For sequential inputs, this is equivalent to
+         * <pre>{@code
+         * List<String> l = elements.stream().collect(Collectors.toList());
+         * return new DomainTable(l, converter);
+         * }</pre>
+         * @param converter
+         * @return
+         */
+        static Collector<String, ?, DomainTable> toDomainTable(IRIProvider converter) {
+            Objects.requireNonNull(converter);
+            return Collectors.collectingAndThen(
+                    Collectors.toList(),
+                    elements -> new DomainTable(elements, converter));
         }
 
     }
@@ -486,14 +525,13 @@ public class OntologicalCPNet extends CPNet {
             Set<IRI> existingIRIs = augmentedOntology.classesInSignature()
                     .map(HasIRI::getIRI)
                     .collect(Collectors.toSet());
-            domainTable = new DomainTable(
-                    domainValues,
-                    domainValue -> Arrays.stream(DISAMBIGUATION_SUFFIXES)
-                            .map(suffix -> baseIRIString + "#" + domainValue + suffix)
-                            .map(IRI::create)
-                            .filter(iri -> !existingIRIs.contains(iri))
-                            .findFirst().orElseThrow(() -> new IllegalStateException(
-                                    String.format("Unable to generate a unique IRI for domain value '%s'", domainValue))));
+            IRIProvider toIRIFunction = domainValue -> Arrays.stream(DISAMBIGUATION_SUFFIXES)
+                    .map(suffix -> baseIRIString + "#" + domainValue + suffix)
+                    .map(IRI::create)
+                    .filter(iri -> !existingIRIs.contains(iri))
+                    .findFirst().orElseThrow(() -> new IllegalStateException(
+                            String.format("Unable to generate a unique IRI for domain value '%s'", domainValue)));
+            domainTable = new DomainTable(domainValues, toIRIFunction);
             // Build a mapping between domain values and their OWL representations.
             Map<String, OWLClass> owlDomainValues = domainValues.stream()
                     .collect(Collectors.toMap(
