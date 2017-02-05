@@ -32,8 +32,8 @@ import java.util.regex.Pattern;
  */
 public class CPNet {
     public static final String MODEL_CHECKER_NAME = "NuSMV";
-    public static final String SMV_FILE_SUFFIX = ".smv";
-    public static final String SMV_TEMPFILE_PREFIX = "nsumv";
+    private static final String SMV_FILE_SUFFIX = ".smv";
+    private static final String SMV_TEMPFILE_PREFIX = "nsumv";
 
     // The NuSMV model of the preference specifications.
     private Path smvModel;
@@ -42,7 +42,7 @@ public class CPNet {
     // A hierarchical structure of preference variables.
     protected PreferenceGraph graph;
 
-    protected CPNet(CPNet n) {
+    CPNet(CPNet n) {
         smvModel = n.smvModel;
         nusmvExec = n.nusmvExec;
         graph = n.graph;
@@ -92,7 +92,7 @@ public class CPNet {
                     new String[]{nusmvExecutable.toString(), smvModel.toString()},
                     new RuntimeException("check your NuSMV installation"));
         }
-        nusmvExec = nusmvExecutable;
+        nusmvExec = nusmvExecutable.toAbsolutePath();
     }
 
     public PreferenceGraph getPreferenceGraph() {

@@ -467,10 +467,11 @@ public class OntologicalCPNet extends CPNet {
         private Map<String, OWLClassExpression> definitions;
 
         private Builder(CPNet baseCPNet, OWLOntology baseOntology) {
+            domainValues = baseCPNet.getPreferenceGraph().domainValues()
+                    .collect(Collectors.toSet());
             this.baseCPNet = baseCPNet;
             this.baseOntology = baseOntology;
             definitions = new HashMap<>();
-            domainValues = this.baseCPNet.graph.domainValues().collect(Collectors.toSet());
             reasonerFactory = null;
         }
 
