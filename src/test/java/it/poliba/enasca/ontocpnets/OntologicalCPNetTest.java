@@ -226,7 +226,8 @@ public class OntologicalCPNetTest {
                         df.getOWLThing(),
                         df.getOWLObjectUnionOf(subset)))
                 // Assert that the new covering axiom is not entailed by the augmented ontology.
-                .forEach(axiom -> Assert.assertFalse(cpnet.entails(axiom),
+                .forEach(axiom -> Assert.assertFalse(
+                        cpnet.applyService(reasoner -> reasoner.isEntailed(axiom)),
                         String.format("the axiom %s is entailed by the augmented ontology", axiom)));
     }
 

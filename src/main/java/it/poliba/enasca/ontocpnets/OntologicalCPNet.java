@@ -193,6 +193,22 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
+     * Creates a new buffering <code>OWLReasoner</code> using the internal {@link OWLReasonerFactory},
+     * with the augmented ontology as the root ontology, then executes the specified reasoning service.
+     * The return value of <code>service</code> is relayed to the caller.
+     * After <code>service</code> returns, the reasoner is immediately disposed of.
+     * @param service
+     * @param <T> the type of the value returned by <code>service</code>
+     * @return the value returned by <code>service</code>
+     */
+    public <T> T applyService(Function<OWLReasoner, T> service) {
+        OWLReasoner reasoner = reasonerFactory.createReasoner(ontology);
+        T result = service.apply(reasoner);
+        reasoner.dispose();
+        return result;
+    }
+
+    /**
      * Returns a builder that builds an <code>OntologicalCPNet</code>
      * upon the specified <code>CPNet</code> and base ontology.
      * Any changes to <code>baseOntology</code> applied before invoking {@link Builder#build()}
@@ -210,22 +226,6 @@ public class OntologicalCPNet extends CPNet {
         Objects.requireNonNull(baseCPNet);
         Objects.requireNonNull(baseOntology);
         return new Builder(baseCPNet, baseOntology);
-    }
-
-    /**
-     * Checks whether the specified axiom is entailed by {@link #ontology}.
-     *
-     * <p>This method is <em>stateless</em>: on each invocation,
-     * a new {@link org.semanticweb.owlapi.reasoner.OWLReasoner} instance
-     * performs the entailment check, then is immediately disposed of.
-     * @param axiom
-     * @return
-     */
-    boolean entails(OWLAxiom axiom) {
-        OWLReasoner reasoner = reasonerFactory.createReasoner(ontology);
-        boolean result = reasoner.isEntailed(axiom);
-        reasoner.dispose();
-        return result;
     }
 
     private OntologicalConstraints computeClosure() {
@@ -321,7 +321,7 @@ public class OntologicalCPNet extends CPNet {
             // Check whether the augmented ontology entails the current branch axiom.
             FeasibilityConstraint constraint = new FeasibilityConstraint(branchClause, domainTable);
             OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(concurrentDataFactory, domainTable);
-            if (entails(branchAxiom)) {
+            if (applyService(reasoner -> reasoner.isEntailed(branchAxiom))) {
                 closure.add(constraint);
                 closureAsFormula.addClause(branchClause);
                 return true;
