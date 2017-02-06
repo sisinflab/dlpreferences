@@ -40,7 +40,7 @@ public class OntologicalCPNet extends CPNet {
     /**
      * Stores equivalent representations of the preference domain entities that were added to the base ontology.
      */
-    Table domainTable;
+    private Table domainTable;
 
     /**
      * The SAT solver used internally to find satisfiable models for collections of ontological constraints,
@@ -102,6 +102,10 @@ public class OntologicalCPNet extends CPNet {
         if (!arePrefsConsistent) {
             throw new IllegalStateException("inconsistent set of preferences");
         }
+    }
+
+    public Table getDomainTable() {
+        return domainTable;
     }
 
     /**
@@ -226,7 +230,7 @@ public class OntologicalCPNet extends CPNet {
     }
 
     private OntologicalConstraints computeClosure() {
-        LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().stream()
+        LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().boxed()
                 .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
         ClosureBuilder closureBuilder = new ClosureBuilder();
         while (!forest.isEmpty()) {
@@ -342,7 +346,7 @@ public class OntologicalCPNet extends CPNet {
     /**
      * An equivalency table that stores different representations of user preferences.
      */
-    public class Table implements ModelConverter {
+    public static class Table implements ModelConverter {
 
         /**
          * Contains equivalent representations of user preferences.
@@ -434,16 +438,33 @@ public class OntologicalCPNet extends CPNet {
         }
 
         /**
-         * Returns the set of DIMACS literals.
+         * Returns the set of domain values.
          * @return
          */
-        public Set<Integer> getDimacsLiterals() {
-            return table.columnKeySet();
+        public Set<String> getDomainValues() {
+            return table.rowKeySet();
         }
 
         /**
-         * Returns the number of mappings in this table.
-         * The return value is also equal to the highest DIMACS literal.
+         * Returns a stream containing the DIMACS literals stored in this <code>Table</code>.
+         * The returned stream is equivalent to
+         * <pre>{@code IntStream.rangeClosed(1, size()); }</pre>
+         * @return
+         */
+        public IntStream getDimacsLiterals() {
+            return IntStream.rangeClosed(1, size());
+        }
+
+        /**
+         * Returns the set of <code>IRI</code>s.
+         * @return
+         */
+        public Set<IRI> getIRISet() {
+            return ImmutableSet.copyOf(table.values());
+        }
+
+        /**
+         * Returns the number of mappings in this table, which is also the highest DIMACS literal.
          * @return
          */
         public int size() {
