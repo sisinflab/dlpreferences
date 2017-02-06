@@ -56,7 +56,7 @@ public class OntologicalCPNet extends CPNet {
     /**
      * The ontological closure, wrapped in a lazy initializer.
      */
-    private Lazy<OntologicalConstraints<FeasibilityConstraint>> closure;
+    private Lazy<ConstraintSet<FeasibilityConstraint>> closure;
 
     /**
      * @param builder
@@ -111,7 +111,7 @@ public class OntologicalCPNet extends CPNet {
      * Retrieves the set of constraints that must be satisfied by undominated outcomes.
      * @return
      */
-    public OntologicalConstraints<OptimalityConstraint> getOptimumSet() {
+    public ConstraintSet<OptimalityConstraint> getOptimumSet() {
         return toOntologicalConstraints(graph.getOptimalityConstraints());
     }
 
@@ -120,20 +120,19 @@ public class OntologicalCPNet extends CPNet {
      * that must be satisfied by feasible outcomes.
      * @return
      */
-    public OntologicalConstraints<FeasibilityConstraint> getClosure() {
+    public ConstraintSet<FeasibilityConstraint> getClosure() {
         return closure.getOrCompute();
     }
 
     /**
-     * Wraps the specified <code>Constraint</code>s in an
-     * <code>OntologicalConstraints</code> instance.
+     * Wraps the specified <code>Constraint</code>s in a <code>ConstraintSet</code> instance.
      * @param constraints
      * @return
      * @see #getOptimumSet()
      * @see #getClosure()
      */
-    public <T extends Constraint> OntologicalConstraints<T> toOntologicalConstraints(Set<T> constraints) {
-        return new OntologicalConstraints<>(
+    public <T extends Constraint> ConstraintSet<T> toOntologicalConstraints(Set<T> constraints) {
+        return new ConstraintSet<>(
                 constraints, domainTable, ontology.getOWLOntologyManager().getOWLDataFactory());
     }
 
@@ -144,14 +143,13 @@ public class OntologicalCPNet extends CPNet {
      * results in an <code>IOException</code>
      */
     public Set<Outcome> paretoOptimal() throws IOException {
-        OntologicalConstraints<OptimalityConstraint> optimalityConstraints =
+        ConstraintSet<OptimalityConstraint> optimalityConstraints =
                 getOptimumSet();
-        OntologicalConstraints<FeasibilityConstraint> feasibilityConstraints =
+        ConstraintSet<FeasibilityConstraint> feasibilityConstraints =
                 getClosure();
-        OntologicalConstraints<? extends Constraint> paretoOptimalityConstraints =
-                toOntologicalConstraints(Sets.union(
-                        optimalityConstraints.constraintSet,
-                        feasibilityConstraints.constraintSet));
+        ConstraintSet<? extends Constraint> paretoOptimalityConstraints =
+                toOntologicalConstraints(
+                        Sets.union(optimalityConstraints, feasibilityConstraints));
         Set<DimacsLiterals> undominatedModels, feasibleModels, paretoOptimalModels;
         // Solve the constraints as boolean problems.
         undominatedModels = solveConstraints(optimalityConstraints)
@@ -230,7 +228,7 @@ public class OntologicalCPNet extends CPNet {
         return new Builder(baseCPNet, baseOntology);
     }
 
-    private OntologicalConstraints<FeasibilityConstraint> computeClosure() {
+    private ConstraintSet<FeasibilityConstraint> computeClosure() {
         LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().boxed()
                 .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
         ClosureBuilder closureBuilder = new ClosureBuilder();
@@ -248,7 +246,7 @@ public class OntologicalCPNet extends CPNet {
      * @return
      */
     private Stream<DimacsLiterals> solveConstraints(
-            OntologicalConstraints<? extends Constraint> constraints) {
+            ConstraintSet<? extends Constraint> constraints) {
         BooleanFormula formula = constraints.clauses().collect(BooleanFormula.toFormula());
         return solver.solve(formula);
     }
@@ -336,7 +334,7 @@ public class OntologicalCPNet extends CPNet {
          * Returns an immutable <code>Set</code> containing the constraints collected so far.
          * @return
          */
-        public OntologicalConstraints<FeasibilityConstraint> build() {
+        public ConstraintSet<FeasibilityConstraint> build() {
             return toOntologicalConstraints(closure);
         }
 
@@ -366,7 +364,7 @@ public class OntologicalCPNet extends CPNet {
          * "b2" <-> 5 -> "http://www.semanticweb.org/myname/myontology#b2"
          * }</pre>
          */
-        private ImmutableTable<String, Integer, IRI> table;
+        private ImmutableTable<String, Integer, IRI> internalTable;
 
         /**
          * Constructs a <code>Table</code> by generating a unique {@link IRI}
@@ -395,7 +393,7 @@ public class OntologicalCPNet extends CPNet {
                 String domainValue = domainList.get(index);
                 tableBuilder.put(domainValue, index+1, converter.getIRI(domainValue));
             });
-            table = tableBuilder.build();
+            internalTable = tableBuilder.build();
         }
 
         /**
@@ -407,7 +405,7 @@ public class OntologicalCPNet extends CPNet {
         @Override
         public int getPositiveLiteral(String domainElement) {
             Objects.requireNonNull(domainElement);
-            return table.row(domainElement).keySet().iterator().next();
+            return internalTable.row(domainElement).keySet().iterator().next();
         }
 
         /**
@@ -421,7 +419,7 @@ public class OntologicalCPNet extends CPNet {
          */
         @Override
         public String fromPositiveLiteral(int value) {
-            return table.column(value).keySet().iterator().next();
+            return internalTable.column(value).keySet().iterator().next();
         }
 
         /**
@@ -433,7 +431,7 @@ public class OntologicalCPNet extends CPNet {
         @Override
         public IRI getIRI(String domainElement) {
             Objects.requireNonNull(domainElement);
-            return table.row(domainElement).values().iterator().next();
+            return internalTable.row(domainElement).values().iterator().next();
         }
 
         /**
@@ -441,7 +439,7 @@ public class OntologicalCPNet extends CPNet {
          * @return
          */
         public Set<String> getDomainValues() {
-            return table.rowKeySet();
+            return internalTable.rowKeySet();
         }
 
         /**
@@ -459,7 +457,7 @@ public class OntologicalCPNet extends CPNet {
          * @return
          */
         public Set<IRI> getIRISet() {
-            return ImmutableSet.copyOf(table.values());
+            return ImmutableSet.copyOf(internalTable.values());
         }
 
         /**
@@ -467,9 +465,21 @@ public class OntologicalCPNet extends CPNet {
          * @return
          */
         public int size() {
-            return table.size();
+            return internalTable.size();
         }
 
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Table other = (Table) o;
+            return internalTable.equals(other.internalTable);
+        }
+
+        @Override
+        public int hashCode() {
+            return internalTable.hashCode();
+        }
     }
 
     /**

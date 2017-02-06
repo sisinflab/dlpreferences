@@ -195,10 +195,12 @@ public class OntologicalCPNetTest {
 
     @Test
     public void testComputeOptimum() throws Exception {
-        Set<? extends Constraint> cpnetOptimalityConstraints =
-                cpnet.getOptimumSet().constraintSet;
-        Assert.assertEquals(cpnetOptimalityConstraints, optimalityConstraints,
-                Utils.reportSetDifference(cpnetOptimalityConstraints, optimalityConstraints));
+        ConstraintSet<OptimalityConstraint> cpnetOptimumSet =
+                cpnet.getOptimumSet();
+        ConstraintSet<OptimalityConstraint> optimumSet =
+                cpnet.toOntologicalConstraints(this.optimalityConstraints);
+        Assert.assertEquals(cpnetOptimumSet, optimumSet,
+                Utils.reportSetDifference(cpnetOptimumSet, optimumSet));
     }
 
     /**
@@ -211,7 +213,7 @@ public class OntologicalCPNetTest {
      */
     @Test
     public void testComputeClosure() throws Exception {
-        OntologicalConstraints<FeasibilityConstraint> cpnetClosure =
+        ConstraintSet<FeasibilityConstraint> cpnetClosure =
                 cpnet.getClosure();
         OWLDataFactory df = OWLManager.createConcurrentOWLOntologyManager().getOWLDataFactory();
         cpnetClosure.axioms().parallel()

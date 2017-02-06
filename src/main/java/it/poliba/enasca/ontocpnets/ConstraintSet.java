@@ -6,6 +6,8 @@ import org.semanticweb.owlapi.model.OWLDataFactory;
 import org.semanticweb.owlapi.model.OWLSubClassOfAxiom;
 import org.semanticweb.owlapi.rdf.rdfxml.parser.IRIProvider;
 
+import java.util.AbstractSet;
+import java.util.Iterator;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -15,21 +17,26 @@ import java.util.stream.Stream;
  * Instances of this class are usually obtained through appropriate methods of {@link OntologicalCPNet}.
  * @param <T> the type of Constraint stored in this object
  */
-public class OntologicalConstraints<T extends Constraint> {
-    Set<T> constraintSet;
+public class ConstraintSet<T extends Constraint>
+        extends AbstractSet<T>
+        implements Set<T> {
+    private Set<T> constraints;
     private ModelConverter converter;
     private OWLDataFactory owlDataFactory;
 
-    OntologicalConstraints(Set<T> constraintSet,
-                           ModelConverter converter,
-                           OWLDataFactory owlDataFactory) {
-        this.constraintSet = Objects.requireNonNull(constraintSet);
+    /**
+     * Constructs a new <code>ConstraintSet</code> backed by the specified <code>Set</code>.
+     * @param constraints
+     * @param converter
+     * @param owlDataFactory
+     */
+    ConstraintSet(Set<T> constraints,
+                  ModelConverter converter,
+                  OWLDataFactory owlDataFactory) {
+        super();
+        this.constraints = Objects.requireNonNull(constraints);
         this.converter = Objects.requireNonNull(converter);
         this.owlDataFactory = Objects.requireNonNull(owlDataFactory);
-    }
-
-    public Stream<T> stream() {
-        return constraintSet.stream();
     }
 
     /**
@@ -49,5 +56,31 @@ public class OntologicalConstraints<T extends Constraint> {
      */
     public Stream<DimacsLiterals> clauses() {
         return stream().map(constraint -> constraint.asClause(converter));
+    }
+
+    @Override
+    public int size() {
+        return constraints.size();
+    }
+
+    @Override
+    public Iterator<T> iterator() {
+        return constraints.iterator();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
+        ConstraintSet<?> other = (ConstraintSet<?>) o;
+        return converter.equals(other.converter);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = super.hashCode();
+        result = 31 * result + converter.hashCode();
+        return result;
     }
 }
