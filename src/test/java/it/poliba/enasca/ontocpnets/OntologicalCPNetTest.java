@@ -196,7 +196,7 @@ public class OntologicalCPNetTest {
     @Test
     public void testComputeOptimum() throws Exception {
         Set<? extends Constraint> cpnetOptimalityConstraints =
-                cpnet.getOptimalityConstraints().constraintSet;
+                cpnet.getOptimumSet().constraintSet;
         Assert.assertEquals(cpnetOptimalityConstraints, optimalityConstraints,
                 Utils.reportSetDifference(cpnetOptimalityConstraints, optimalityConstraints));
     }
@@ -211,9 +211,10 @@ public class OntologicalCPNetTest {
      */
     @Test
     public void testComputeClosure() throws Exception {
-        OntologicalConstraints closure = cpnet.getFeasibilityConstraints();
+        OntologicalConstraints<FeasibilityConstraint> cpnetClosure =
+                cpnet.getClosure();
         OWLDataFactory df = OWLManager.createConcurrentOWLOntologyManager().getOWLDataFactory();
-        closure.axioms().parallel()
+        cpnetClosure.axioms().parallel()
                 // Retrieve the set of disjunct OWL classes from the current covering axiom.
                 .map(axiom -> axiom.getSubClass().asDisjunctSet())
                 // Compute the powerset, excluding the empty set and the original set.

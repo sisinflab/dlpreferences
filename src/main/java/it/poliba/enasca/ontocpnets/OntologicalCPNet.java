@@ -43,7 +43,7 @@ public class OntologicalCPNet extends CPNet {
 
     /**
      * The SAT solver used internally to find satisfiable models for collections of ontological constraints,
-     * such as {@link PreferenceGraph#getOptimalityConstraints()} and {@link #getFeasibilityConstraints()}.
+     * such as {@link PreferenceGraph#getOptimalityConstraints()} and {@link #getClosure()}.
      */
     private SAT4JSolver solver;
 
@@ -56,7 +56,7 @@ public class OntologicalCPNet extends CPNet {
     /**
      * The ontological closure, wrapped in a lazy initializer.
      */
-    private Lazy<OntologicalConstraints> closure;
+    private Lazy<OntologicalConstraints<FeasibilityConstraint>> closure;
 
     /**
      * @param builder
@@ -111,7 +111,7 @@ public class OntologicalCPNet extends CPNet {
      * Retrieves the set of constraints that must be satisfied by undominated outcomes.
      * @return
      */
-    public OntologicalConstraints getOptimalityConstraints() {
+    public OntologicalConstraints<OptimalityConstraint> getOptimumSet() {
         return toOntologicalConstraints(graph.getOptimalityConstraints());
     }
 
@@ -120,7 +120,7 @@ public class OntologicalCPNet extends CPNet {
      * that must be satisfied by feasible outcomes.
      * @return
      */
-    public OntologicalConstraints getFeasibilityConstraints() {
+    public OntologicalConstraints<FeasibilityConstraint> getClosure() {
         return closure.getOrCompute();
     }
 
@@ -129,11 +129,11 @@ public class OntologicalCPNet extends CPNet {
      * <code>OntologicalConstraints</code> instance.
      * @param constraints
      * @return
-     * @see #getOptimalityConstraints()
-     * @see #getFeasibilityConstraints()
+     * @see #getOptimumSet()
+     * @see #getClosure()
      */
-    public OntologicalConstraints toOntologicalConstraints(Set<? extends Constraint> constraints) {
-        return new OntologicalConstraints(
+    public <T extends Constraint> OntologicalConstraints<T> toOntologicalConstraints(Set<T> constraints) {
+        return new OntologicalConstraints<>(
                 constraints, domainTable, ontology.getOWLOntologyManager().getOWLDataFactory());
     }
 
@@ -144,9 +144,11 @@ public class OntologicalCPNet extends CPNet {
      * results in an <code>IOException</code>
      */
     public Set<Outcome> paretoOptimal() throws IOException {
-        OntologicalConstraints optimalityConstraints = getOptimalityConstraints();
-        OntologicalConstraints feasibilityConstraints = getFeasibilityConstraints();
-        OntologicalConstraints paretoOptimalityConstraints =
+        OntologicalConstraints<OptimalityConstraint> optimalityConstraints =
+                getOptimumSet();
+        OntologicalConstraints<FeasibilityConstraint> feasibilityConstraints =
+                getClosure();
+        OntologicalConstraints<? extends Constraint> paretoOptimalityConstraints =
                 toOntologicalConstraints(Sets.union(
                         optimalityConstraints.constraintSet,
                         feasibilityConstraints.constraintSet));
@@ -228,7 +230,7 @@ public class OntologicalCPNet extends CPNet {
         return new Builder(baseCPNet, baseOntology);
     }
 
-    private OntologicalConstraints computeClosure() {
+    private OntologicalConstraints<FeasibilityConstraint> computeClosure() {
         LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().boxed()
                 .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
         ClosureBuilder closureBuilder = new ClosureBuilder();
@@ -245,7 +247,8 @@ public class OntologicalCPNet extends CPNet {
      * @param constraints
      * @return
      */
-    private Stream<DimacsLiterals> solveConstraints(OntologicalConstraints constraints) {
+    private Stream<DimacsLiterals> solveConstraints(
+            OntologicalConstraints<? extends Constraint> constraints) {
         BooleanFormula formula = constraints.clauses().collect(BooleanFormula.toFormula());
         return solver.solve(formula);
     }
@@ -333,7 +336,7 @@ public class OntologicalCPNet extends CPNet {
          * Returns an immutable <code>Set</code> containing the constraints collected so far.
          * @return
          */
-        public OntologicalConstraints build() {
+        public OntologicalConstraints<FeasibilityConstraint> build() {
             return toOntologicalConstraints(closure);
         }
 

@@ -13,13 +13,14 @@ import java.util.stream.Stream;
 /**
  * A set of ontological constraints.
  * Instances of this class are usually obtained through appropriate methods of {@link OntologicalCPNet}.
+ * @param <T> the type of Constraint stored in this object
  */
-public class OntologicalConstraints {
-    Set<? extends Constraint> constraintSet;
+public class OntologicalConstraints<T extends Constraint> {
+    Set<T> constraintSet;
     private ModelConverter converter;
     private OWLDataFactory owlDataFactory;
 
-    OntologicalConstraints(Set<? extends Constraint> constraintSet,
+    OntologicalConstraints(Set<T> constraintSet,
                            ModelConverter converter,
                            OWLDataFactory owlDataFactory) {
         this.constraintSet = Objects.requireNonNull(constraintSet);
@@ -27,7 +28,7 @@ public class OntologicalConstraints {
         this.owlDataFactory = Objects.requireNonNull(owlDataFactory);
     }
 
-    public Stream<? extends Constraint> constraints() {
+    public Stream<T> stream() {
         return constraintSet.stream();
     }
 
@@ -36,7 +37,7 @@ public class OntologicalConstraints {
      * @see Constraint#asAxiom(OWLDataFactory, IRIProvider)
      */
     public Stream<OWLSubClassOfAxiom> axioms() {
-        return constraints().map(constraint -> constraint.asAxiom(owlDataFactory, converter));
+        return stream().map(constraint -> constraint.asAxiom(owlDataFactory, converter));
     }
 
     /**
@@ -47,6 +48,6 @@ public class OntologicalConstraints {
      * @see BooleanFormula#toSynchronizedFormula()
      */
     public Stream<DimacsLiterals> clauses() {
-        return constraints().map(constraint -> constraint.asClause(converter));
+        return stream().map(constraint -> constraint.asClause(converter));
     }
 }
