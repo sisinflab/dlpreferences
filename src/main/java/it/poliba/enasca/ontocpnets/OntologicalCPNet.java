@@ -1,6 +1,5 @@
 package it.poliba.enasca.ontocpnets;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Sets;
@@ -72,12 +71,12 @@ public class OntologicalCPNet extends CPNet {
         closure = new Lazy<>(this::computeClosure);
         // Build a mapping between domain values and their OWL representations.
         OWLDataFactory dataFactory = builder.baseOntology.getOWLOntologyManager().getOWLDataFactory();
-        Map<String, OWLClass> owlDomainValues = builder.domainValues.stream()
+        Map<String, OWLClass> owlDomainValues = graph.domainValues()
                 .collect(Collectors.toMap(
                         Function.identity(),
                         domainValue -> dataFactory.getOWLClass(domainTable.getIRI(domainValue))));
         // Build the new class definition axioms.
-        Stream<OWLEquivalentClassesAxiom> classDefinitions = builder.domainValues.stream()
+        Stream<OWLEquivalentClassesAxiom> classDefinitions = graph.domainValues()
                 .map(domainValue -> dataFactory.getOWLEquivalentClassesAxiom(
                         owlDomainValues.get(domainValue),
                         builder.definitions.get(domainValue)));
@@ -261,23 +260,20 @@ public class OntologicalCPNet extends CPNet {
                 .filter(dimacsLiteral -> dimacsLiteral > 0)
                 .mapToObj(domainTable::fromPositiveLiteral)
                 .collect(Collectors.toSet());
+        // Verify that the model contains exactly one domain value per preference variable.
+        if (graph.size() != domainValuesInModel.size()) {
+            throw new IllegalStateException(
+                    String.format("incorrect model size: expected %d, got %d",
+                            graph.size(),
+                            domainValuesInModel.size()));
+        }
+        // Map each preference variable to the corresponding domain value in the model.
         Map<String, String> assignments = graph.domainMap().entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        entry -> {
-                            Set<String> matchingDomainValues = entry.getValue().stream()
-                                    .filter(domainValuesInModel::contains)
-                                    .collect(Collectors.toSet());
-                            if (matchingDomainValues.isEmpty()) {
-                                throw new IllegalStateException(
-                                        String.format("no assignment for variable '%s'", entry.getKey()));
-                            }
-                            if (matchingDomainValues.size() > 1) {
-                                throw new IllegalStateException(
-                                        String.format("conflicting assignments for variable '%s'", entry.getKey()));
-                            }
-                            return matchingDomainValues.iterator().next();
-                        }
+                        entry -> entry.getValue().stream()
+                                .filter(domainValuesInModel::contains)
+                                .findAny().get()
                 ));
         try {
             return new Outcome(assignments);
@@ -346,7 +342,7 @@ public class OntologicalCPNet extends CPNet {
     /**
      * An equivalency table that stores different representations of user preferences.
      */
-    public static class Table implements ModelConverter {
+    public class Table implements ModelConverter {
 
         /**
          * Contains equivalent representations of user preferences.
@@ -390,7 +386,7 @@ public class OntologicalCPNet extends CPNet {
                     .filter(iri -> !existingIRIs.contains(iri))
                     .findFirst().orElseThrow(() -> new IllegalStateException(
                             String.format("Unable to generate a unique IRI for domain value '%s'", str)));
-            ImmutableList<String> domainList = ImmutableSet.copyOf(builder.domainValues).asList();
+            List<String> domainList = graph.domainValues().collect(Collectors.toList());
             ImmutableTable.Builder<String, Integer, IRI> tableBuilder = ImmutableTable.builder();
             IntStream.range(0, domainList.size()).forEachOrdered(index -> {
                 String domainValue = domainList.get(index);

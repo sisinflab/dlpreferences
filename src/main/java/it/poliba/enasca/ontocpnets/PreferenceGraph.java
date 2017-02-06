@@ -30,7 +30,7 @@ public class PreferenceGraph {
     Map<String, Node> nodeMap;
 
     private PreferenceGraph(Map<String, Node> nodeMap) {
-        this.nodeMap = Objects.requireNonNull(nodeMap);
+        this.nodeMap = nodeMap;
     }
 
     /**
@@ -61,6 +61,14 @@ public class PreferenceGraph {
         return nodeMap.values().stream()
                 .flatMap(node -> node.optimum.stream())
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * Return the number of preference variables (nodes) in the graph.
+     * @return
+     */
+    public int size() {
+        return nodeMap.size();
     }
 
     public static Builder builder() {
