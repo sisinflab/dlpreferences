@@ -2,16 +2,11 @@ package it.poliba.enasca.ontocpnets;
 
 import com.google.common.collect.ImmutableMap;
 import it.poliba.enasca.ontocpnets.sat.DimacsLiterals;
-import it.poliba.enasca.ontocpnets.util.StreamBasedBuilder;
 import org.semanticweb.owlapi.model.OWLDataFactory;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -32,7 +27,7 @@ public class FeasibilityConstraint extends AbstractConstraint {
         this.clause = clause;
     }
 
-    public FeasibilityConstraint(DimacsLiterals clause, VarNameProvider converter) {
+    FeasibilityConstraint(DimacsLiterals clause, VarNameProvider converter) {
         this(clause.asMap(converter));
     }
 
@@ -58,25 +53,6 @@ public class FeasibilityConstraint extends AbstractConstraint {
     @Override
     public Map<String, Boolean> right() {
         return ImmutableMap.copyOf(clause);
-    }
-
-    /**
-     * Returns a <code>Collector</code> that accumulates elements into a <code>FeasibilityConstraint</code>.
-     * Elements are converted into preference domain values by the specified <code>converter</code>,
-     * then partitioned according to <code>truthValueFunc</code>, which returns their truth value.
-     * @param truthValueFunc a function that returns the truth value of the input element
-     * @param converter a function that converts an input element into a preference domain value
-     * @param <T> the type of input elements
-     * @return
-     */
-    static <T> Collector<T, ?, FeasibilityConstraint> toConstraint(
-            Predicate<T> truthValueFunc,
-            Function<T, String> converter) {
-        Objects.requireNonNull(truthValueFunc);
-        Objects.requireNonNull(converter);
-        return Collectors.collectingAndThen(
-                Collectors.toMap(converter, truthValueFunc::test),
-                FeasibilityConstraint::new);
     }
 
     /**

@@ -43,7 +43,7 @@ public class OntologicalCPNet extends CPNet {
 
     /**
      * The SAT solver used internally to find satisfiable models for collections of ontological constraints,
-     * such as {@link PreferenceGraph#getOptimalityConstraints()} and {@link #getClosure()}.
+     * such as {@link PreferenceGraph#getOptimumSet()} and {@link #getClosure()}.
      */
     private SAT4JSolver solver;
 
@@ -112,7 +112,7 @@ public class OntologicalCPNet extends CPNet {
      * @return
      */
     public ConstraintSet<OptimalityConstraint> getOptimumSet() {
-        return toOntologicalConstraints(graph.getOptimalityConstraints());
+        return toConstraintSet(graph.getOptimumSet());
     }
 
     /**
@@ -125,15 +125,15 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Wraps the specified <code>Constraint</code>s in a <code>ConstraintSet</code> instance.
+     * Returns a <code>ConstraintSet</code> instance backed by the specified <code>Set</code>.
      * @param constraints
      * @return
      * @see #getOptimumSet()
      * @see #getClosure()
      */
-    public <T extends Constraint> ConstraintSet<T> toOntologicalConstraints(Set<T> constraints) {
-        return new ConstraintSet<>(
-                constraints, domainTable, ontology.getOWLOntologyManager().getOWLDataFactory());
+    public <T extends Constraint> ConstraintSet<T> toConstraintSet(Set<T> constraints) {
+        return new ConstraintSet<>(constraints, domainTable,
+                ontology.getOWLOntologyManager().getOWLDataFactory());
     }
 
     /**
@@ -148,8 +148,7 @@ public class OntologicalCPNet extends CPNet {
         ConstraintSet<FeasibilityConstraint> feasibilityConstraints =
                 getClosure();
         ConstraintSet<? extends Constraint> paretoOptimalityConstraints =
-                toOntologicalConstraints(
-                        Sets.union(optimalityConstraints, feasibilityConstraints));
+                toConstraintSet(Sets.union(optimalityConstraints, feasibilityConstraints));
         Set<DimacsLiterals> undominatedModels, feasibleModels, paretoOptimalModels;
         // Solve the constraints as boolean problems.
         undominatedModels = solveConstraints(optimalityConstraints)
@@ -209,43 +208,12 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Returns a builder that builds an <code>OntologicalCPNet</code>
-     * upon the specified <code>CPNet</code> and base ontology.
-     * Any changes to <code>baseOntology</code> applied before invoking {@link Builder#build()}
-     * will take effect.
-     *
-     * <p>The specified base ontology must be consistent and <em>named</em>
-     * (that is, <code>baseOntology.getOntologyID().isAnonymous()</code> must return <code>false</code>);
-     * if either condition is not satisfied, {@link Builder#build()}
-     * will throw an {@link IllegalStateException}.
-     * @param baseCPNet the parent object of the <code>OntologicalCPNet</code> instance to build
-     * @param baseOntology
-     * @return
-     */
-    public static Builder builder(CPNet baseCPNet, OWLOntology baseOntology) {
-        Objects.requireNonNull(baseCPNet);
-        Objects.requireNonNull(baseOntology);
-        return new Builder(baseCPNet, baseOntology);
-    }
-
-    private ConstraintSet<FeasibilityConstraint> computeClosure() {
-        LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().boxed()
-                .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
-        ClosureBuilder closureBuilder = new ClosureBuilder();
-        while (!forest.isEmpty()) {
-            forest.expand(branchClause -> closureBuilder.accept(
-                    new DimacsLiterals(branchClause.mapToInt(Integer::intValue))));
-        }
-        return closureBuilder.build();
-    }
-
-    /**
      * Translates a set of constraints into a boolean satisfiability problem
      * and finds satisfiable models.
      * @param constraints
      * @return
      */
-    private Stream<DimacsLiterals> solveConstraints(
+    public Stream<DimacsLiterals> solveConstraints(
             ConstraintSet<? extends Constraint> constraints) {
         BooleanFormula formula = constraints.clauses().collect(BooleanFormula.toFormula());
         return solver.solve(formula);
@@ -256,7 +224,7 @@ public class OntologicalCPNet extends CPNet {
      * @param model
      * @return
      */
-    private Outcome interpretModel(DimacsLiterals model) {
+    public Outcome interpretModel(DimacsLiterals model) {
         Set<String> domainValuesInModel = model.stream()
                 .filter(dimacsLiteral -> dimacsLiteral > 0)
                 .mapToObj(domainTable::fromPositiveLiteral)
@@ -281,6 +249,37 @@ public class OntologicalCPNet extends CPNet {
         } catch (PreferenceReasonerException e) {
             throw new IllegalStateException("invalid outcome", e);
         }
+    }
+
+    private ConstraintSet<FeasibilityConstraint> computeClosure() {
+        LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().boxed()
+                .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
+        ClosureBuilder closureBuilder = new ClosureBuilder();
+        while (!forest.isEmpty()) {
+            forest.expand(branchClause -> closureBuilder.accept(
+                    new DimacsLiterals(branchClause.mapToInt(Integer::intValue))));
+        }
+        return closureBuilder.build();
+    }
+
+    /**
+     * Returns a builder that builds an <code>OntologicalCPNet</code>
+     * upon the specified <code>CPNet</code> and base ontology.
+     * Any changes to <code>baseOntology</code> applied before invoking {@link Builder#build()}
+     * will take effect.
+     *
+     * <p>The specified base ontology must be consistent and <em>named</em>
+     * (that is, <code>baseOntology.getOntologyID().isAnonymous()</code> must return <code>false</code>);
+     * if either condition is not satisfied, {@link Builder#build()}
+     * will throw an {@link IllegalStateException}.
+     * @param baseCPNet the parent object of the <code>OntologicalCPNet</code> instance to build
+     * @param baseOntology
+     * @return
+     */
+    public static Builder builder(CPNet baseCPNet, OWLOntology baseOntology) {
+        Objects.requireNonNull(baseCPNet);
+        Objects.requireNonNull(baseOntology);
+        return new Builder(baseCPNet, baseOntology);
     }
 
     /**
@@ -335,7 +334,7 @@ public class OntologicalCPNet extends CPNet {
          * @return
          */
         public ConstraintSet<FeasibilityConstraint> build() {
-            return toOntologicalConstraints(closure);
+            return toConstraintSet(closure);
         }
 
     }
@@ -483,7 +482,7 @@ public class OntologicalCPNet extends CPNet {
     }
 
     /**
-     * Creates instances of {@link OntologicalCPNet}.
+     * Creates <code>OntologicalCPNet</code> instances.
      */
     public static class Builder {
         // constants

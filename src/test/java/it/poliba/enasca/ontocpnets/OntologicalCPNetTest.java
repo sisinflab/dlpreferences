@@ -198,7 +198,7 @@ public class OntologicalCPNetTest {
         ConstraintSet<OptimalityConstraint> cpnetOptimumSet =
                 cpnet.getOptimumSet();
         ConstraintSet<OptimalityConstraint> optimumSet =
-                cpnet.toOntologicalConstraints(this.optimalityConstraints);
+                cpnet.toConstraintSet(this.optimalityConstraints);
         Assert.assertEquals(cpnetOptimumSet, optimumSet,
                 Utils.reportSetDifference(cpnetOptimumSet, optimumSet));
     }

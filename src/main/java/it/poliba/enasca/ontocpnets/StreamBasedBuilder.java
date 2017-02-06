@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.util;
+package it.poliba.enasca.ontocpnets;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -8,7 +8,7 @@ import java.util.stream.Stream;
  * A base class for a builder that collects items into {@link Stream}s.
  * @param <T> the type of object being built
  */
-public abstract class StreamBasedBuilder<T> {
+abstract class StreamBasedBuilder<T> {
     /**
      * Adds elements of type {@link E} to the given {@link Stream.Builder}.
      * @throws NullPointerException if <code>elements</code> is <code>null</code> or contains <code>null</code>s

@@ -1,9 +1,9 @@
 package it.poliba.enasca.ontocpnets;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import it.poliba.enasca.ontocpnets.except.SpecFileParseException;
-import it.poliba.enasca.ontocpnets.util.StreamBasedBuilder;
 import model.PreferenceSpecification;
 import model.PreferenceStatement;
 import model.PreferenceVariable;
@@ -27,10 +27,14 @@ public class PreferenceGraph {
     /**
      * A map-based representation of the preference graph, where keys are variable names and values are nodes.
      */
-    Map<String, Node> nodeMap;
+    private Map<String, Node> nodeMap;
 
     private PreferenceGraph(Map<String, Node> nodeMap) {
         this.nodeMap = nodeMap;
+    }
+
+    public Map<String, Node> getNodes() {
+        return ImmutableMap.copyOf(nodeMap);
     }
 
     /**
@@ -50,16 +54,16 @@ public class PreferenceGraph {
      * @return
      */
     public Stream<String> domainValues() {
-        return nodeMap.values().stream().flatMap(node -> node.domain.stream());
+        return nodeMap.values().stream().flatMap(Node::domain);
     }
 
     /**
      * Retrieves the set of constraints that must be satisfied by the undominated outcomes.
      * @return
      */
-    public Set<OptimalityConstraint> getOptimalityConstraints() {
+    public Set<OptimalityConstraint> getOptimumSet() {
         return nodeMap.values().stream()
-                .flatMap(node -> node.optimum.stream())
+                .flatMap(Node::optimum)
                 .collect(Collectors.toSet());
     }
 
@@ -230,13 +234,13 @@ public class PreferenceGraph {
                     .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().build()));
             // Validate the domain values.
             if (nodeMap.values().stream().mapToInt(node -> node.domain.size()).sum() !=
-                    nodeMap.values().stream().flatMap(node -> node.domain.stream()).distinct().count()) {
+                    nodeMap.values().stream().flatMap(Node::domain).distinct().count()) {
                 throw new IllegalStateException("duplicate domain elements in different nodes");
             }
             // Validate the temporary graph and rebuild the optimum sets.
             for (Node node : nodeMap.values()) {
                 // Build the list of parent assignments.
-                List<Set<String>> parentDomains = node.parents.stream()
+                List<Set<String>> parentDomains = node.parents()
                         .map(parentName -> nodeMap.get(parentName).domain)
                         .collect(Collectors.toList());
                 Set<List<String>> parentAssignments = Sets.cartesianProduct(parentDomains);
@@ -281,6 +285,18 @@ public class PreferenceGraph {
             this.optimum = optimum;
         }
 
+        public Stream<String> domain() {
+            return domain.stream();
+        }
+
+        public Stream<String> parents() {
+            return parents.stream();
+        }
+
+        public Stream<OptimalityConstraint> optimum() {
+            return optimum.stream();
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -306,12 +322,11 @@ public class PreferenceGraph {
          * <pre>{@code assignment.containsAll(constraint.condition)}</pre>
          * @return
          */
-        public Stream<OptimalityConstraint> getApplicableConstraints(Collection<String> assignment) {
-            return optimum.stream()
-                    .filter(constraint -> assignment.containsAll(constraint.condition));
+        Stream<OptimalityConstraint> getApplicableConstraints(Collection<String> assignment) {
+            return optimum().filter(constraint -> assignment.containsAll(constraint.condition));
         }
 
-        public static Builder builder() {
+        private static Builder builder() {
             return new Builder();
         }
 

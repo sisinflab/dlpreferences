@@ -40,7 +40,7 @@ public class CPNet {
     // The NuSMV binary.
     private Path nusmvExec;
     // A hierarchical structure of preference variables.
-    protected PreferenceGraph graph;
+    PreferenceGraph graph;
 
     CPNet(CPNet n) {
         smvModel = n.smvModel;
