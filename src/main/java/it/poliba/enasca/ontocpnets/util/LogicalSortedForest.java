@@ -21,7 +21,7 @@ import java.util.stream.Stream;
  * {@link #successor(Object)} is allowed to generate.
  *
  * <p>The forest is constructed by creating <i>2*K</i> trees, <i>K</i> being the number of entries in the ordering map.
- * Each tree is rooted at a different element of the ordering map. Elements are wrapped in {@link Node<N>} objects.
+ * Each tree is rooted at a different element of the ordering map. Elements are wrapped in {@link Node} objects.
  *
  * @param <N> the type of element that will be stored in each node
  */
