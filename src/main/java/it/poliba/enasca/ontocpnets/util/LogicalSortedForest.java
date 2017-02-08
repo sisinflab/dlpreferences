@@ -3,7 +3,6 @@ package it.poliba.enasca.ontocpnets.util;
 import com.google.common.collect.ImmutableMap;
 
 import java.util.*;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collector;
@@ -43,16 +42,23 @@ public class LogicalSortedForest<N> {
      */
     private List<Node<N>> leaves;
 
-    private LogicalSortedForest(ImmutableMap<N, N> orderingMap) {
-        List<N> orderingList = orderingMap.entrySet().stream()
-                .flatMap(entry -> Stream.of(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
-        ImmutableMap.Builder<N, List<N>> successorsBuilder = ImmutableMap.builder();
-        for (int i = 0; i < orderingList.size(); i += 2) {
-            successorsBuilder.put(orderingList.get(i), orderingList.subList(i+2, orderingList.size()));
-            successorsBuilder.put(orderingList.get(i+1), orderingList.subList(i+2, orderingList.size()));
+    /**
+     * Constructs a new <code>LogicalSortedForest</code> from a list of the form
+     * <em>p1, ¬p1, p2, ¬p2, &hellip;</em>.
+     * @param zippedList
+     */
+    private LogicalSortedForest(List<N> zippedList) {
+        if ((zippedList.size() % 2) != 0) {
+            throw new IllegalArgumentException("the size of the input list is not a multiple of 2");
         }
-        successors = successorsBuilder.build();
+        // Build the map of successors.
+        ImmutableMap.Builder<N, List<N>> builder = ImmutableMap.builder();
+        for (int i = 0; i < zippedList.size(); i += 2) {
+            builder.put(zippedList.get(i), zippedList.subList(i+2, zippedList.size()));
+            builder.put(zippedList.get(i+1), zippedList.subList(i+2, zippedList.size()));
+        }
+        successors = builder.build();
+        // Build the initial fringe.
         leaves = successors.keySet().stream()
                 .map(Node::root)
                 .collect(Collectors.toList());
@@ -175,12 +181,12 @@ public class LogicalSortedForest<N> {
      */
     public static <T> Collector<T, ?, LogicalSortedForest<T>> toLogicalSortedForest(UnaryOperator<T> complementOf) {
         Objects.requireNonNull(complementOf);
-        return Collectors.collectingAndThen(
-                Collectors.toMap(
-                        Function.identity(), complementOf,
-                        (key, key2) -> { throw new IllegalStateException(String.format("duplicate key '%s'", key)); },
-                        LinkedHashMap::new),
-                orderingMap -> new LogicalSortedForest<T>(ImmutableMap.copyOf(orderingMap)));
+        // Zip the input elements and their complements into a list.
+        Collector<T, List<T>, List<T>> toZippedList = Collector.of(
+                ArrayList::new,
+                (elements, e) -> { elements.add(e); elements.add(complementOf.apply(e)); },
+                (left, right) -> { left.addAll(right); return left; });
+        return Collectors.collectingAndThen(toZippedList, LogicalSortedForest::new);
     }
 
     /**
