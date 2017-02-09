@@ -7,8 +7,8 @@ import exception.PreferenceReasonerException;
 import it.poliba.enasca.ontocpnets.sat.BooleanFormula;
 import it.poliba.enasca.ontocpnets.sat.DimacsLiterals;
 import it.poliba.enasca.ontocpnets.sat.SAT4JSolver;
+import it.poliba.enasca.ontocpnets.util.IntPreferenceForest;
 import it.poliba.enasca.ontocpnets.util.Lazy;
-import it.poliba.enasca.ontocpnets.util.LogicalSortedForest;
 import model.Outcome;
 import org.semanticweb.HermiT.ReasonerFactory;
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -252,12 +252,10 @@ public class OntologicalCPNet extends CPNet {
     }
 
     private ConstraintSet<FeasibilityConstraint> computeClosure() {
-        LogicalSortedForest<Integer> forest = domainTable.getDimacsLiterals().boxed()
-                .collect(LogicalSortedForest.toLogicalSortedForest(literal -> -literal));
+        IntPreferenceForest forest = new IntPreferenceForest(domainTable.size());
         ClosureBuilder closureBuilder = new ClosureBuilder();
         while (!forest.isEmpty()) {
-            forest.expand(branchClause -> closureBuilder.accept(
-                    new DimacsLiterals(branchClause.mapToInt(Integer::intValue))));
+            forest.expand(closureBuilder::accept);
         }
         return closureBuilder.build();
     }
@@ -310,13 +308,14 @@ public class OntologicalCPNet extends CPNet {
          * <p>If an eligible constraint is not redundant (that is, it is not already
          * entailed by the axioms collected in the closure so far), it is added to the closure.
          *
-         * @param branchClause
+         * @param branch
          * @return
          */
-        public boolean accept(DimacsLiterals branchClause) {
+        public boolean accept(IntStream branch) {
+            DimacsLiterals branchClause = new DimacsLiterals(branch);
             // Check whether the current branch clause is entailed by the closure.
             if (solver.implies(closureAsFormula, branchClause)) {
-                return true;
+                return false;
             }
             // Check whether the augmented ontology entails the current branch axiom.
             FeasibilityConstraint constraint = new FeasibilityConstraint(branchClause, domainTable);
@@ -324,9 +323,9 @@ public class OntologicalCPNet extends CPNet {
             if (applyService(reasoner -> reasoner.isEntailed(branchAxiom))) {
                 closure.add(constraint);
                 closureAsFormula.addClause(branchClause);
-                return true;
+                return false;
             }
-            return false;
+            return true;
         }
 
         /**
