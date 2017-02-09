@@ -32,14 +32,12 @@ public class OntologicalCPNetTest {
     private ImmutableSetMultimap<String, String> preferenceVariables;
     private OWLOntology augmented;
     private Set<OptimalityConstraint> optimalityConstraints;
-    private Set<FeasibilityConstraint> closure;
     private Set<Map<String, String>> outcomesAsMaps;
 
     @Factory(dataProvider = "factoryProvider")
     public OntologicalCPNetTest(Path xmlPrefSpec, Path baseOntologyPath, Path augmentedOntologyPath,
                                 ImmutableSetMultimap<String, String> preferenceVariables,
                                 Stream<OptimalityConstraint> optimalityStream,
-                                Stream<FeasibilityConstraint> closure,
                                 Stream<Map<String, String>> outcomesAsMaps)
             throws Exception {
         // Load the base ontology.
@@ -61,7 +59,6 @@ public class OntologicalCPNetTest {
         this.preferenceVariables = preferenceVariables;
         this.augmented = augmentedOntology;
         this.optimalityConstraints = optimalityStream.collect(Collectors.toSet());
-        this.closure = closure.collect(Collectors.toSet());
         this.outcomesAsMaps = outcomesAsMaps.collect(Collectors.toSet());
     }
 
@@ -123,48 +120,6 @@ public class OntologicalCPNetTest {
                         .build())
                 .build();
         // The ontological closure.
-        Stream<FeasibilityConstraint> hotelClosure = Stream.<FeasibilityConstraint>builder()
-                .add(FeasibilityConstraint.builder()
-                        .addPositive("Cy")
-                        .addNegated("Wy")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addNegated("Rs", "Rm")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addNegated("Rm", "Rl")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addNegated("Rs", "Rl")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addPositive("Rs", "Rm", "Rl")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addNegated("Wy", "Wn")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addPositive("Wy", "Wn")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addNegated("Bo", "Bn")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addPositive("Bo", "Bn")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addNegated("Cy", "Cn")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addPositive("Cy", "Cn")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addNegated("Pl", "Ps")
-                        .build())
-                .add(FeasibilityConstraint.builder()
-                        .addPositive("Pl", "Ps")
-                        .build())
-                .build();
         // The set of optimal outcomes.
         Stream<Map<String, String>> hotelOutcomes = Stream.<Map<String, String>>builder()
                 .add(ImmutableMap.<String, String>builder()
@@ -172,7 +127,7 @@ public class OntologicalCPNetTest {
                 .build();
         return new Object[][]{
                 {hotelXMLPrefSpec, hotelBaseOntology, hotelAugmentedOntology,
-                        hotelPreferenceVariables, hotelOptimalityStream, hotelClosure, hotelOutcomes}
+                        hotelPreferenceVariables, hotelOptimalityStream, hotelOutcomes}
         };
     }
 
@@ -207,7 +162,7 @@ public class OntologicalCPNetTest {
      * Checks whether the axioms in the ontological closure satisfy the condition of minimal clause,
      * that is for each axiom
      * <pre>{@code SubClassOf(owl:Thing, ObjectUnionOf(X, Y, ...)) }</pre>
-     * there exists no strict subset <em>Q</em> of <em>{X, Y, ...}</em> such that
+     * there exists no proper subset <em>Q</em> of <em>{X, Y, ...}</em> such that
      * <em>Q</em> is entailed by the augmented ontology.
      * @throws Exception
      */
@@ -219,7 +174,7 @@ public class OntologicalCPNetTest {
         cpnetClosure.axioms().parallel()
                 // Retrieve the set of disjunct OWL classes from the current covering axiom.
                 .map(axiom -> axiom.getSubClass().asDisjunctSet())
-                // Compute the powerset, excluding the empty set and the original set.
+                // Generate all proper, non-empty subsets.
                 .map(clause -> Sets.difference(
                         Sets.powerSet(clause),
                         ImmutableSet.<Set<OWLClassExpression>>of(Collections.emptySet(), clause)))
