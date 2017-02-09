@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.util;
+package it.poliba.enasca.ontocpnets.tree;
 
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;

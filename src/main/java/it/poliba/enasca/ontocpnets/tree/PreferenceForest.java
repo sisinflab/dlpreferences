@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.util;
+package it.poliba.enasca.ontocpnets.tree;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -24,7 +24,7 @@ public class PreferenceForest<P> extends AbstractPreferenceForest<P, Stream<P>>
 
     /**
      * Constructs a <code>PreferenceForest</code> from a list of the form
-     * <pre>p1, ¬p1, p2, ¬p2, &hellip; pN, ¬pN</pre>
+     * <pre>p1, not(p1), p2, not(p2), &hellip; pN, not(pN)</pre>
      * where <code>N == zippedList.size()</code>.
      * @param zippedList
      */

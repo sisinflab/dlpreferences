@@ -8,16 +8,16 @@ abstract class AbstractConstraint implements Constraint {
         String leftSide = left().entrySet().stream()
                 .map(entry -> entry.getValue() ?
                         entry.getKey() :
-                        "¬" + entry.getKey())
-                .collect(Collectors.joining(" ∧ "));
+                        String.format("not(%s)", entry.getKey()))
+                .collect(Collectors.joining(" AND "));
         String rightSide = right().entrySet().stream()
                 .map(entry -> entry.getValue() ?
                         entry.getKey() :
-                        "¬" + entry.getKey())
-                .collect(Collectors.joining(" ∨ "));
+                        String.format("not(%s)", entry.getKey()))
+                .collect(Collectors.joining(" OR "));
         if (leftSide.isEmpty()) {
-            return '{' + rightSide + '}';
+            return String.format("{%s}", rightSide);
         }
-        return '{' + leftSide + " → " + rightSide + '}';
+        return String.format("{%s IMPLIES %s}", leftSide, rightSide);
     }
 }

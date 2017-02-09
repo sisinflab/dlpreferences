@@ -13,7 +13,8 @@ import java.util.stream.Stream;
 /**
  * An element of the ontological closure.
  */
-public class FeasibilityConstraint extends AbstractConstraint {
+public class FeasibilityConstraint extends AbstractConstraint
+        implements Constraint {
     /**
      * A union of elements with their respective logical state.
      * A boolean value of <code>false</code> indicates a logical complement.

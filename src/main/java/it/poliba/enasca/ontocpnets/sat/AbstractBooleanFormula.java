@@ -9,7 +9,11 @@ import java.util.stream.Stream;
 /**
  * A skeletal implementation of {@link BooleanFormula}.
  */
-abstract class AbstractBooleanFormula implements BooleanFormula {
+public abstract class AbstractBooleanFormula implements BooleanFormula {
+    /**
+     * The formula in conjunctive normal form.
+     * Each element represents a clause.
+     */
     protected Set<DimacsLiterals> clausesCNF;
 
     AbstractBooleanFormula(Set<DimacsLiterals> clausesCNF) {
@@ -65,7 +69,7 @@ abstract class AbstractBooleanFormula implements BooleanFormula {
         return clausesCNF.stream()
                 .map(clause -> Arrays.stream(clause.literals)
                         .mapToObj(String::valueOf)
-                        .collect(Collectors.joining(" ∨ ", "(", ")")))
-                .collect(Collectors.joining(" ∧ "));
+                        .collect(Collectors.joining(" OR ", "(", ")")))
+                .collect(Collectors.joining(" AND "));
     }
 }

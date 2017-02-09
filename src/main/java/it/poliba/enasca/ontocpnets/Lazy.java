@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.util;
+package it.poliba.enasca.ontocpnets;
 
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -6,7 +6,7 @@ import java.util.function.Supplier;
 /**
  * A lazy initializer for a value of type {@link T}.
  */
-public class Lazy<T> {
+class Lazy<T> {
     private T value;
     private Supplier<T> valueSupplier;
 

@@ -5,7 +5,6 @@ import exception.PreferenceReasonerException;
 import it.poliba.enasca.ontocpnets.except.NuSMVExitStatusException;
 import it.poliba.enasca.ontocpnets.except.NuSMVRuntimeException;
 import it.poliba.enasca.ontocpnets.except.SpecFileParseException;
-import it.poliba.enasca.ontocpnets.util.NuSMVRunner;
 import model.Outcome;
 import model.PreferenceMetaData;
 import model.PreferenceSpecification;

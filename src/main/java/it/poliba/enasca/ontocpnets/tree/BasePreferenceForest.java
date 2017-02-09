@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.util;
+package it.poliba.enasca.ontocpnets.tree;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,10 +14,10 @@ import java.util.stream.Stream;
  * <pre>Q = {p1, p2, &hellip; pN}</pre>
  * where each <em>p</em> is a propositional variable of type <code>P</code>, a preference forest
  * is a collection of rooted trees that generates a family of subsets of
- * <pre>F = {p1, ¬p1, p2, ¬p2, &hellip; pN, ¬pN}</pre>
+ * <pre>F = {p1, not(p1), p2, not(p2), &hellip; pN, not(pN)}</pre>
  * At level <em>k &lt; N</em>, the forest generates the <em>k-subsets</em> of <em>F</em>,
  * excluding the ones in which a propositional variable <em>p</em> appears
- * as both <em>p</em> and <em>¬p</em>.
+ * as both <em>p</em> and <em>not(p)</em>.
  *
  * <p>After the <em>N</em>-th expansion, the forest will be empty.
  *
@@ -81,9 +81,9 @@ public interface BasePreferenceForest<P, S extends BaseStream<P, S>> {
      * from the propositional variables
      * <pre>p1, p2, &hellip; pN</pre>
      * {@link #branches()} will return the <em>k-subsets</em> of
-     * <pre>p1, ¬p1, p2, ¬p2, &hellip; pN, ¬pN</pre>
+     * <pre>p1, not(p1), p2, not(p2), &hellip; pN, not(pN)</pre>
      * excluding: <em>a)</em> the ones in which a propositional variable <em>p</em> appears
-     * as both <em>p</em> and <em>¬p</em>; and <em>b)</em> the ones that were filtered out
+     * as both <em>p</em> and <em>not(p)</em>; and <em>b)</em> the ones that were filtered out
      * by the input <code>Predicate</code>s
      *
      * <p>After the <em>N</em>-th and subsequent invocations, {@link #isEmpty()}

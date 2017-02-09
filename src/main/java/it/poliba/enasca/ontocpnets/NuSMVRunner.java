@@ -1,6 +1,5 @@
-package it.poliba.enasca.ontocpnets.util;
+package it.poliba.enasca.ontocpnets;
 
-import it.poliba.enasca.ontocpnets.CPNet;
 import it.poliba.enasca.ontocpnets.except.NuSMVExitStatusException;
 import it.poliba.enasca.ontocpnets.except.NuSMVInterruptedException;
 import it.poliba.enasca.ontocpnets.except.NuSMVRuntimeException;

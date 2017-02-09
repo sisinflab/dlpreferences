@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.util;
+package it.poliba.enasca.ontocpnets.tree;
 
 import java.util.List;
 import java.util.Objects;
@@ -10,7 +10,7 @@ import java.util.stream.Stream;
 /**
  * A skeletal implementation of {@link BasePreferenceForest}.
  */
-abstract class AbstractPreferenceForest<P, S extends BaseStream<P, S>>
+public abstract class AbstractPreferenceForest<P, S extends BaseStream<P, S>>
         implements BasePreferenceForest<P, S> {
     /**
      * The list of leaf nodes.

@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets.util;
+package it.poliba.enasca.ontocpnets.tree;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -13,6 +13,9 @@ import java.util.stream.Stream;
  */
 public class IntPreferenceForest extends AbstractPreferenceForest<Integer, IntStream>
         implements BasePreferenceForest<Integer, IntStream> {
+    /**
+     * The number of propositional variables.
+     */
     private int maxLiteral;
 
     /**

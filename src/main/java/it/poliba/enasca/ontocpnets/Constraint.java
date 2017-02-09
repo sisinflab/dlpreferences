@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 
 /**
  * An ontological constraint, represented as a propositional implication of the form
- * <pre>A ∧ B ∧ ... → X ∨ Y ∨ ...</pre>
+ * <pre>A AND B AND ... IMPLIES X OR Y OR ...</pre>
  * where the left side is a logical conjunction and the right side is a logical disjunction.
  */
 public interface Constraint {
@@ -37,9 +37,9 @@ public interface Constraint {
      * DIMACS literals are obtained using the specified <code>converter</code>.
      *
      * <p>The general form
-     * <pre>A ∧ B ∧ ... → X ∨ Y ∨ ...</pre>
+     * <pre>A AND B AND ... IMPLIES X OR Y OR ...</pre>
      * is translated into the equivalent clause
-     * <pre>¬A ∨ ¬B ∨ ... ∨ X ∨ Y ∨ ...</pre>
+     * <pre>not(A) OR not(B) OR ... OR X OR Y OR ...</pre>
      * @param converter a mapping function between element names and DIMACS literals
      * @return
      */

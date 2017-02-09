@@ -9,7 +9,8 @@ import java.util.stream.Stream;
 /**
  * An element of the optimum set.
  */
-public class OptimalityConstraint extends AbstractConstraint {
+public class OptimalityConstraint extends AbstractConstraint
+        implements Constraint {
     /**
      * Encodes the conjunction of elements on the left side of the implication.
      */
