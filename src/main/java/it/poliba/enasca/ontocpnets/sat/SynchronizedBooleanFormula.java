@@ -9,7 +9,7 @@ import java.util.stream.Stream;
 /**
  * A thread-safe implementation of {@link BooleanFormula}.
  */
-class SynchronizedBooleanFormula extends AbstractBooleanFormula {
+class SynchronizedBooleanFormula extends AbstractBooleanFormula implements BooleanFormula {
     SynchronizedBooleanFormula(Set<DimacsLiterals> clauses) {
         super(clauses);
     }

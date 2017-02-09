@@ -6,7 +6,7 @@ import java.util.Set;
 /**
  * A simple implementation of {@link BooleanFormula}.
  */
-class SimpleBooleanFormula extends AbstractBooleanFormula {
+class SimpleBooleanFormula extends AbstractBooleanFormula implements BooleanFormula {
     SimpleBooleanFormula(Set<DimacsLiterals> clauses) {
         super(clauses);
     }
