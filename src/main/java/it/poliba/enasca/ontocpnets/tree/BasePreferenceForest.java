@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.BaseStream;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -22,8 +21,7 @@ import java.util.stream.Stream;
  * <p>After the <em>N</em>-th expansion, the forest will be empty.
  *
  * <p>The distinctive feature of a preference forest is the ability to control the expansion process
- * by filtering branches. See {@link #expand(Predicate)} and {@link #expandOrdered(Predicate)}
- * for more information.
+ * by filtering branches. See {@link #expand(Predicate)} for more information.
  *
  * <p>The following snippet shows how to fully expand a forest while retrieving
  * the list of branches at each level:
@@ -37,58 +35,42 @@ import java.util.stream.Stream;
  * @param <S> a stream type representing a branch
  */
 public interface BasePreferenceForest<P, S extends BaseStream<P, S>> {
-    /**
-     * Returns the leaf nodes.
-     * @return
-     */
-    Stream<? extends BaseNode<P, S>> leaves();
 
     /**
      * Returns the list of branches.
      * @return
      */
-    default List<S> branches() {
-        return leaves().map(BaseNode::getReachable)
-                .collect(Collectors.toList());
-    }
+    List<S> branches();
 
     /**
      * Returns <code>true</code> if all branches have been cut.
      * @return
      */
-    default boolean isEmpty() {
-        return !leaves().findAny().isPresent();
-    }
+    boolean isEmpty();
 
     /**
-     * Equivalent to
-     * <pre>{@code expand(branch -> true); }</pre>
+     * Expands each eligible branch by one level.
+     * A branch is eligible for expansion if it has not yet reached its maximum length.
+     * Ineligible branches are cut from the forest.
+     *
+     * <p>After <em>k</em> invocations of this method on a forest constructed
+     * from the propositional variables <em>p1, p2, &hellip;, pN</em>,
+     * {@link #branches()} will return the <em>k-subsets</em> of
+     * <pre>{ p1, not(p1), p2, not(p2), &hellip;, pN, not(pN) }</pre>
+     * excluding the ones in which a propositional variable <em>p</em> appears
+     * as both <em>p</em> and <em>not(p)</em>.
+     *
+     * <p>After the <em>N</em>-th and subsequent invocations, {@link #isEmpty()}
+     * will always evaluate to <code>true</code>.
      */
     default void expand() {
         expand(branch -> true);
     }
 
     /**
-     * Expands each eligible branch by one level.
-     * A branch is eligible for expansion if it satisfies both of the following conditions:
-     * <ul>
-     *     <li>applying the input <code>Predicate</code> on the branch produces <code>true</code>;</li>
-     *     <li>the branch has reached its maximum length.</li>
-     * </ul>
-     * If a branch is not eligible for expansion, it is cut from the forest.
-     *
-     * <p>After <em>k</em> invocations of this method on a forest constructed
-     * from the propositional variables
-     * <pre>p1, p2, &hellip; pN</pre>
-     * {@link #branches()} will return the <em>k-subsets</em> of
-     * <pre>p1, not(p1), p2, not(p2), &hellip; pN, not(pN)</pre>
-     * excluding: <em>a)</em> the ones in which a propositional variable <em>p</em> appears
-     * as both <em>p</em> and <em>not(p)</em>; and <em>b)</em> the ones that were filtered out
-     * by the input <code>Predicate</code>s
-     *
-     * <p>After the <em>N</em>-th and subsequent invocations, {@link #isEmpty()}
-     * will always evaluate to <code>true</code>.
-     *
+     * Inserts a filter in the expansion process of {@link #expand()}.
+     * Branches who do not match input the <code>Predicate</code> become ineligible for expansion.
+
      * <p>This method aims for concurrent processing of the branches.
      * The input <code>Predicate</code> must follow the same behavioral constraints
      * specified by {@link Stream#filter(Predicate)}.
@@ -99,20 +81,13 @@ public interface BasePreferenceForest<P, S extends BaseStream<P, S>> {
     void expand(Predicate<S> branchFilter);
 
     /**
-     * Equivalent to
-     * <pre>{@code expandOrdered(branch -> true); }</pre>
+     * Inserts a filter in the expansion process of {@link #expand()}, based on a boolean mask.
+     * Branches who map to <code>false</code> become ineligible for expansion.
+     * @param mask
+     * @throws IllegalArgumentException if <code>mask</code> does not match
+     * the current number of branches.
      */
-    default void expandOrdered() {
-        expandOrdered(branch -> true);
-    }
-
-    /**
-     * Equivalent to {@link #expand(Predicate)}, with the exception that
-     * branches are processed one at a time, in the encountered order.
-     * Consequently, the input <code>Predicate</code> is not restricted by behavioral constraints.
-     * @param branchFilter
-     */
-    void expandOrdered(Predicate<S> branchFilter);
+    void expand(boolean[] mask);
 
     /**
      * A node that stores an element of type {@link P} and a reference to its parent.

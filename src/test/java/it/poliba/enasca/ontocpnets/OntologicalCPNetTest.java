@@ -144,7 +144,7 @@ public class OntologicalCPNetTest {
         Map<String, Collection<String>> domainMap = preferenceVariables.asMap();
         Map<String, Set<String>> cpnetDomainMap = cpnet.getPreferenceGraph().domainMap();
         Assert.assertEquals(cpnetDomainMap, domainMap,
-                Utils.reportSetDifference(cpnetDomainMap.entrySet(), domainMap.entrySet()));
+                TestUtils.reportSetDifference(cpnetDomainMap.entrySet(), domainMap.entrySet()));
     }
 
     @Test
@@ -154,7 +154,7 @@ public class OntologicalCPNetTest {
         ConstraintSet<OptimalityConstraint> optimumSet =
                 cpnet.toConstraintSet(this.optimalityConstraints);
         Assert.assertEquals(cpnetOptimumSet, optimumSet,
-                Utils.reportSetDifference(cpnetOptimumSet, optimumSet));
+                TestUtils.reportSetDifference(cpnetOptimumSet, optimumSet));
     }
 
     /**
@@ -195,7 +195,7 @@ public class OntologicalCPNetTest {
                         .map(Outcome::getOutcomeAsValuationMap)
                         .collect(Collectors.toSet());
         Assert.assertEquals(hardParetoOutcomes, outcomesAsMaps,
-                Utils.reportSetDifference(hardParetoOutcomes, outcomesAsMaps));
+                TestUtils.reportSetDifference(hardParetoOutcomes, outcomesAsMaps));
     }
 
     /**

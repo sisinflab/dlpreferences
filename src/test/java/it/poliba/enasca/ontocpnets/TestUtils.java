@@ -1,13 +1,16 @@
 package it.poliba.enasca.ontocpnets;
 
 import com.google.common.collect.Sets;
+import org.testng.Assert;
 
+import java.util.Arrays;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
- * Contains static helper methods.
+ * Contains static helper methods for tests.
  */
-public class Utils {
+public class TestUtils {
     /**
      * This method assumes that <code>expected.equals(actual) == false</code>.
      * @param actual
@@ -41,5 +44,20 @@ public class Utils {
                 .append("\nDifference between actual and expected: ")
                 .append(Sets.difference(actual, expected))
                 .toString();
+    }
+
+    public static void assertEqualsUnordered(int[] actual, int[] expected) {
+        assertEqualsUnordered(actual, expected, null);
+    }
+
+    public static void assertEqualsUnordered(int[] actual, int[] expected, String message) {
+        if (actual == expected) return;
+        if (actual == null || expected == null) {
+            Assert.fail(String.format("Expected '%s', but got '%s'",
+                    Arrays.toString(expected), Arrays.toString(actual)));
+        }
+        Set<Integer> actualSet = Arrays.stream(actual).boxed().collect(Collectors.toSet());
+        Set<Integer> expectedSet = Arrays.stream(expected).boxed().collect(Collectors.toSet());
+        Assert.assertEquals(actualSet, expectedSet, message);
     }
 }

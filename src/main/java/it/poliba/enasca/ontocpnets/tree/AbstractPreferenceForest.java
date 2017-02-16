@@ -1,5 +1,7 @@
 package it.poliba.enasca.ontocpnets.tree;
 
+import com.google.common.collect.Lists;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -15,11 +17,11 @@ public abstract class AbstractPreferenceForest<P, S extends BaseStream<P, S>>
     /**
      * The list of leaf nodes.
      */
-    protected List<? extends BaseNode<P, S>> leaves;
+    protected List<BaseNode<P, S>> leaves;
 
     @Override
-    public Stream<? extends BaseNode<P, S>> leaves() {
-        return leaves.stream();
+    public List<S> branches() {
+        return Lists.transform(leaves, BaseNode::getReachable);
     }
 
     @Override
@@ -37,14 +39,15 @@ public abstract class AbstractPreferenceForest<P, S extends BaseStream<P, S>>
     }
 
     @Override
-    public void expandOrdered(Predicate<S> branchFilter) {
-        Objects.requireNonNull(branchFilter);
-        Stream.Builder<BaseNode<P, S>> newLeaves = Stream.builder();
-        for (BaseNode<P, S> leaf : leaves) {
-            if (branchFilter.test(leaf.getReachable())) {
-                leaf.children().forEachOrdered(newLeaves);
-            }
+    public void expand(boolean[] mask) {
+        Objects.requireNonNull(mask);
+        if (mask.length != leaves.size()) {
+            throw new IllegalArgumentException();
         }
-        leaves = newLeaves.build().collect(Collectors.toList());
+        Stream.Builder<BaseNode<P, S>> builder = Stream.builder();
+        for (int i = 0; i < mask.length; i++) {
+            if (mask[i]) leaves.get(i).children().forEachOrdered(builder);
+        }
+        leaves = builder.build().collect(Collectors.toList());
     }
 }
