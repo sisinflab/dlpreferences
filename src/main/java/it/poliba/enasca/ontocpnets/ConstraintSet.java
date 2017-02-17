@@ -51,7 +51,6 @@ public class ConstraintSet<T extends Constraint>
      * Converts this set of ontological constraints into boolean clauses.
      * @return
      * @see Constraint#asClause(DimacsProvider)
-     * @see BooleanFormula#toFormula()
      * @see BooleanFormula#toSynchronizedFormula()
      */
     public Stream<DimacsLiterals> clauses() {

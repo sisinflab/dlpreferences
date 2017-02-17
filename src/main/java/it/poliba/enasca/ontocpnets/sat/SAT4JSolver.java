@@ -81,20 +81,15 @@ public class SAT4JSolver {
     }
 
     /**
-     * Returns <code>true</code> if <code>formula</code> implies <code>clause</code>.
-     *
-     * <p>This is equivalent to
-     * <pre>{@code
-     * BooleanFormula testFormula = formula.copy();
-     * testFormula.addNegatedClause(clause);
-     * return !isSatisfiable(testFormula);
-     * }</pre>
+     * Checks whether <code>formula</code> implies <code>clause</code>.
      * @param formula
      * @param clause
      * @return
      */
     public boolean implies(BooleanFormula formula, DimacsLiterals clause) {
-        BooleanFormula testFormula = formula.copy();
+        Objects.requireNonNull(formula);
+        Objects.requireNonNull(clause);
+        BooleanFormula testFormula = formula.clauses().collect(BooleanFormula.toFormula());
         testFormula.addNegatedClause(clause);
         return !isSatisfiable(testFormula);
     }

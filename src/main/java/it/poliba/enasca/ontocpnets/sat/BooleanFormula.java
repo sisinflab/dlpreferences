@@ -1,8 +1,6 @@
 package it.poliba.enasca.ontocpnets.sat;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -10,59 +8,74 @@ import java.util.stream.Stream;
 /**
  * A boolean formula in conjunctive normal form.
  */
-public interface BooleanFormula {
+public class BooleanFormula {
+    /**
+     * The formula in conjunctive normal form.
+     * Each element represents a clause.
+     */
+    private Set<DimacsLiterals> clausesCNF;
+
+    private BooleanFormula(Set<DimacsLiterals> clauses) {
+        clausesCNF = clauses;
+    }
+
+    /**
+     * Returns the clauses that make up this formula.
+     * @return
+     */
+    public Stream<DimacsLiterals> clauses() {
+        return clausesCNF.stream();
+    }
+
     /**
      * Adds the specified clause.
      * @param clause
      */
-    void addClause(DimacsLiterals clause);
+    public void addClause(DimacsLiterals clause) {
+        clausesCNF.add(Objects.requireNonNull(clause));
+    }
 
     /**
      * Adds the negation of the specified clause, that is,
      * the conjunction of its negated literals (De Morgan's law).
      * @param clause
      */
-    void addNegatedClause(DimacsLiterals clause);
+    public void addNegatedClause(DimacsLiterals clause) {
+        Objects.requireNonNull(clause);
+        for (int l : clause.literals) addLiteral(-l);
+    }
 
     /**
      * Adds a trivial clause consisting of the specified literal.
      * @param literal
      */
-    void addLiteral(int literal);
-
-    /**
-     * Returns the clauses that make up this formula.
-     * @return
-     */
-    Stream<DimacsLiterals> clauses();
+    public void addLiteral(int literal) {
+        clausesCNF.add(DimacsLiterals.of(literal));
+    }
 
     /**
      * Returns the number of clauses in this formula.
      * @return
      */
-    int size();
-
-    /**
-     * Returns a copy of this formula.
-     * @return
-     */
-    BooleanFormula copy();
-
-    /**
-     * Returns an empty formula.
-     * @return
-     */
-    static BooleanFormula empty() {
-        return new SimpleBooleanFormula();
+    public int size() {
+        return clausesCNF.size();
     }
 
     /**
-     * Returns a thread-safe implementation of <code>BooleanFormula</code>,
+     * Returns a new empty formula.
+     * @return
+     */
+    public static BooleanFormula empty() {
+        return new BooleanFormula(new HashSet<>());
+    }
+
+    /**
+     * Returns a new synchronized implementation of <code>BooleanFormula</code>,
      * initialized to an empty formula.
      * @return
      */
-    static BooleanFormula emptySynchronized() {
-        return new SynchronizedBooleanFormula();
+    public static BooleanFormula emptySynchronized() {
+        return new BooleanFormula(Collections.synchronizedSet(new HashSet<>()));
     }
 
     /**
@@ -70,24 +83,42 @@ public interface BooleanFormula {
      * @return
      * @see SAT4JSolver#solve(BooleanFormula)
      */
-    static Collector<DimacsLiterals, ?, ? extends BooleanFormula> toFormula() {
+    public static Collector<DimacsLiterals, ?, BooleanFormula> toFormula() {
         return Collectors.collectingAndThen(
                 Collectors.toCollection(HashSet::new),
-                SimpleBooleanFormula::new);
+                BooleanFormula::new);
     }
 
     /**
-     * Returns a <code>Collector</code> that accumulates input clauses into a
-     * thread-safe implementation of <code>BooleanFormula</code>.
+     * Returns a <code>Collector</code> that accumulates input clauses into a new formula.
      * @return
      * @see SAT4JSolver#solve(BooleanFormula)
      */
-    static Collector<DimacsLiterals, ?, ? extends BooleanFormula> toSynchronizedFormula() {
-        return Collector.of(
-                () -> Collections.<DimacsLiterals>synchronizedSet(new HashSet<>()),
-                Set::add,
-                (left, right) -> { left.addAll(right); return left; },
-                SynchronizedBooleanFormula::new,
-                Collector.Characteristics.CONCURRENT, Collector.Characteristics.UNORDERED);
+    public static Collector<DimacsLiterals, ?, BooleanFormula> toSynchronizedFormula() {
+        return Collectors.collectingAndThen(
+                Collectors.toCollection(() -> Collections.synchronizedSet(new HashSet<>())),
+                BooleanFormula::new);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        BooleanFormula other = (BooleanFormula) o;
+        return clausesCNF.equals(other.clausesCNF);
+    }
+
+    @Override
+    public int hashCode() {
+        return clausesCNF.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return clausesCNF.stream()
+                .map(clause -> Arrays.stream(clause.literals)
+                        .mapToObj(String::valueOf)
+                        .collect(Collectors.joining(" OR ", "(", ")")))
+                .collect(Collectors.joining(" AND "));
     }
 }
