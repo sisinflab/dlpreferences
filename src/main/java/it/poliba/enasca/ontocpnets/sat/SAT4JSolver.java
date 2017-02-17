@@ -112,7 +112,7 @@ public class SAT4JSolver {
     private Stream<DimacsLiterals> models(BooleanFormula problem, int maxResults) {
         // Build the internal representation of the input problem.
         IVec<IVecInt> problemAsIVec = problem.clauses().collect(toIVec());
-        ModelIterator solver = new ModelIterator(SolverFactory.newDefault());
+        ModelIterator solver = new ModelIterator(SolverFactory.newLight());
         if (maxLiteral != MAXLITERAL_DEFAULT) {
             solver.newVar(maxLiteral);
         }
