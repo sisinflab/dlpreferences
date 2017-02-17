@@ -3,7 +3,7 @@ package it.poliba.enasca.ontocpnets.except;
 import java.nio.file.Path;
 
 /**
- * Signals that the XML input file to a CP-net could not be parsed successfully.
+ * Thrown when the XML input file to a CP-net cannot be parsed successfully.
  */
 public class SpecFileParseException extends Exception {
     public SpecFileParseException(Path file, Throwable cause) {

@@ -16,8 +16,8 @@ abstract class AbstractConstraint implements Constraint {
                         String.format("not(%s)", entry.getKey()))
                 .collect(Collectors.joining(" OR "));
         if (leftSide.isEmpty()) {
-            return String.format("{%s}", rightSide);
+            return rightSide;
         }
-        return String.format("{%s IMPLIES %s}", leftSide, rightSide);
+        return String.format("%s IMPLIES %s", leftSide, rightSide);
     }
 }

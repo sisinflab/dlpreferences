@@ -70,8 +70,7 @@ public class BooleanFormula {
     }
 
     /**
-     * Returns a new synchronized implementation of <code>BooleanFormula</code>,
-     * initialized to an empty formula.
+     * Returns a new empty formula, backed by a synchronized set.
      * @return
      */
     public static BooleanFormula emptySynchronized() {
@@ -90,7 +89,8 @@ public class BooleanFormula {
     }
 
     /**
-     * Returns a <code>Collector</code> that accumulates input clauses into a new formula.
+     * Returns a <code>Collector</code> that accumulates input clauses into a new formula,
+     * backed by a synchronized set.
      * @return
      * @see SAT4JSolver#solve(BooleanFormula)
      */
