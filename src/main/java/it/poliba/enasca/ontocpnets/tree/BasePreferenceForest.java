@@ -43,10 +43,20 @@ public interface BasePreferenceForest<P, S extends BaseStream<P, S>> {
     List<S> branches();
 
     /**
+     * Returns the number of branches.
+     * @return
+     */
+    default int size() {
+        return branches().size();
+    }
+
+    /**
      * Returns <code>true</code> if all branches have been cut.
      * @return
      */
-    boolean isEmpty();
+    default boolean isEmpty() {
+        return size() == 0;
+    }
 
     /**
      * Expands each eligible branch by one level.

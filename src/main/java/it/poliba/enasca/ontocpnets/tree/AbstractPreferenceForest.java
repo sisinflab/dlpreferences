@@ -7,7 +7,7 @@ import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.BaseStream;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.stream.IntStream;
 
 /**
  * A skeletal implementation of {@link BasePreferenceForest}.
@@ -22,6 +22,11 @@ public abstract class AbstractPreferenceForest<P, S extends BaseStream<P, S>>
     @Override
     public List<S> branches() {
         return Lists.transform(leaves, BaseNode::getReachable);
+    }
+
+    @Override
+    public int size() {
+        return leaves.size();
     }
 
     @Override
@@ -44,10 +49,10 @@ public abstract class AbstractPreferenceForest<P, S extends BaseStream<P, S>>
         if (mask.length != leaves.size()) {
             throw new IllegalArgumentException();
         }
-        Stream.Builder<BaseNode<P, S>> builder = Stream.builder();
-        for (int i = 0; i < mask.length; i++) {
-            if (mask[i]) leaves.get(i).children().forEachOrdered(builder);
-        }
-        leaves = builder.build().collect(Collectors.toList());
+        leaves = IntStream.range(0, mask.length).parallel()
+                .filter(i -> mask[i])
+                .mapToObj(i -> leaves.get(i))
+                .flatMap(BaseNode::children)
+                .collect(Collectors.toList());
     }
 }
