@@ -1,115 +1,168 @@
 package it.poliba.enasca.ontocpnets;
 
-import it.poliba.enasca.ontocpnets.except.NuSMVExitStatusException;
-import it.poliba.enasca.ontocpnets.except.NuSMVInterruptedException;
-import it.poliba.enasca.ontocpnets.except.NuSMVRuntimeException;
-import it.poliba.enasca.ontocpnets.except.NuSMVTimeoutException;
+import it.poliba.enasca.ontocpnets.except.MalformedNuSMVModelException;
+import it.unibg.nuseen.modeladvisor.ModelLoader;
+import it.unibg.nuseen.modeladvisor.NuSMVExecutor;
+import it.unibg.nuseen.modeladvisor.executor.NuSMVModelAdvisor;
+import it.unibg.nuseen.modeladvisor.metaproperties.MetaPropertyChecker;
+import it.unibg.nuseen.modeladvisor.metaproperties.NoPropertyIsFalse;
+import it.unibg.nuseen.nusmvlanguage.nuSMV.*;
 
-import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
-import java.util.function.BiPredicate;
-import java.util.stream.Collectors;
+import java.util.Collection;
 
 /**
- * Contains facilities to run NuSMV in a {@link Process}.
- * The main point of entry is {@link #run(Path, Path, BiPredicate)}, which uses a binary predicate
- * to check the output of NuSMV.
+ * Verifies NuSMV models using a local NuSMV installation.
  */
 public class NuSMVRunner {
-    /**
-     * The default timeout for the NuSMV process, in milliseconds.
-     */
-    public static final long TIMEOUTMS = 5000;
+    static final String SMV_TEMPFILE_PREFIX = "nsumv";
+    static final String SMV_FILE_SUFFIX = ".smv";
+
+    private static final NuSmvModel TRIVIAL_MODEL = trivialModel();
+
+    private NuSMVModelAdvisor nma;
 
     /**
-     * Invokes a NuSMV executable with the specified input file.
-     * The output and error streams from NuSMV are redirected to newly created {@link BufferedReader}s,
-     * which are passed to <code>checker</code>.
+     * Creates a <code>NuSMVRunner</code> instance that verifies NuSMV models
+     * using the specified NuSMV executable file.
      * <p>
-     * The <code>checker</code> function takes two parameters:
-     * <ol>
-     * <li>a buffered reader connected to the standard output stream of NuSMV;</li>
-     * <li>a buffered reader connected to the standard error stream of NuSMV.</li>
-     * </ol>
-     * The purpose of <code>checker</code> is to read from the buffers, perform some checks
-     * and return <code>true</code> if it was successful.
+     * NuSMVRunner may need to store an on-disk representation of the model being verified,
+     * in the form of a .smv file in the system temp directory, as specified by the
+     * JRE property <code>java.io.tmpdir</code>.
      *
-     * @param executable the path to the NuSMV binary
-     * @param input      the input file that NuSMV will receive as command line argument
-     * @param checker    a predicate that checks whether NuSMV ran successfully
-     * @return the same value returned by <code>checker</code>
-     * @throws FileNotFoundException if any of the {@link Path} arguments are invalid.
-     * To be valid, the arguments must be regular files. Additionally, <code>executable</code> must be an executable file
-     * and <code>input</code> must be a readable file.
-     * @throws IOException              if the NuSMV process could not start due to an I/O error
-     * @throws NuSMVExitStatusException if the NuSMV process exited with a non-zero status code
-     * @throws NuSMVTimeoutException    if the NuSMV process was still alive after a waiting time of {@link #TIMEOUTMS}
-     * @throws NuSMVInterruptedException if the NuSMV process is interrupted
-     * @throws NuSMVRuntimeException    if the <code>checker</code> function threw an unchecked exception.
-     * The original exception is wrapped in a NuSMVRuntimeException
-     * by adding details about the NuSMV process.
-     * @throws NullPointerException if any of the arguments are <code>null</code>
+     * @param nusmvExec the NuSMV executable file
+     * @throws FileNotFoundException if <code>nusmvExec</code> is not an existing, executable file.
+     * @throws IOException if an I/O error occurs while attempting to write in the system temp directory.
      */
-    public static boolean run(Path executable, Path input, BiPredicate<BufferedReader, BufferedReader> checker)
-            throws IOException {
-        // Check the input arguments.
-        Objects.requireNonNull(checker);
-        if (!Files.isExecutable(executable)) {
-            throw new FileNotFoundException(executable.toString());
+    public NuSMVRunner(Path nusmvExec) throws IOException {
+        if (!Files.isExecutable(nusmvExec)) {
+            throw new FileNotFoundException();
         }
-        if (!Files.isRegularFile(input) || !Files.isReadable(input)) {
-            throw new FileNotFoundException(input.toString());
-        }
-        // Build the command line.
-        String[] commandLine = {executable.toString(),
-                "-dcx",  // do not generate counterexamples
-                input.toString()};
-        // Create and start the NuSMV process.
-        Process process = new ProcessBuilder(Arrays.stream(commandLine).collect(Collectors.toList()))
-                .start();
-        // Apply the predicate.
-        boolean result;
-        try (BufferedReader pOutputReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-             BufferedReader pErrorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))
-        ) {
-            result = checker.test(pOutputReader, pErrorReader);
-            if (!process.waitFor(TIMEOUTMS, TimeUnit.MILLISECONDS)) {
-                throw new NuSMVTimeoutException(commandLine, TIMEOUTMS, TimeUnit.MILLISECONDS);
-            }
-            int exitVal = process.exitValue();
-            if (exitVal != 0) {
-                throw new NuSMVExitStatusException(commandLine, exitVal);
-            }
-        } catch (NuSMVTimeoutException | NuSMVExitStatusException e) {
-            throw e;
-        } catch (InterruptedException e) {
-            throw new NuSMVInterruptedException(commandLine, e);
-        } catch (RuntimeException | Error e) {
-            throw new NuSMVRuntimeException(commandLine, e);
-        } finally {
-            if (process.isAlive()) {
-                process.destroy();
-            }
-        }
-        return result;
+        // Set up the NuSMV executor.
+        Path smvTemp = Files.createTempFile(SMV_TEMPFILE_PREFIX, SMV_FILE_SUFFIX);
+        smvTemp.toFile().deleteOnExit();
+        nma = new NuSMVModelAdvisor(smvTemp.toAbsolutePath().toString());
+        nma.setPath(nusmvExec.toAbsolutePath().toString());
+        nma.setMetapropertiesExecution(
+                false,  // disable check for "Every assignment condition can be true"
+                false,  // disable check for "Every assignment is eventually applied"
+                false,  // disable check for "The assignment conditions are mutually exclusive"
+                false,  // disable check for "For every assignment terminated by a default condition true, at least an assignment condition is true"
+                false,  // disable check for "No assignment is always trivial"
+                false,  // disable check for "Every variable can take any value in its type"
+                false,  // disable check for "Every variable not explicitly assigned is used"
+                false,  // disable check for "Every independent variable is used"
+                true    // enable check for "Every property is true and no property is vacuously satisfied"
+        );
+        NuSMVExecutor.jna = false;
+        // Check the local NuSMV installation by verifying a trivial model.
+        verify(TRIVIAL_MODEL);
     }
 
     /**
-     * An implementer of {@link java.util.function.BiPredicate} that checks whether the output stream
-     * contains at least one occurrence of the string {@link CPNet#MODEL_CHECKER_NAME}.
-     *
-     * @param outputReader a reader connected to the output stream of NuSMV
-     * @param errorReader  a reader connected to the error stream of NuSMV
-     * @return <code>true</code> if the condition is met; <code>false</code> otherwise
+     * Checks whether the CTL and LTL properties of a NuSMV model are all true.
+     * @param model
+     * @throws MalformedNuSMVModelException if <code>model</code> is not a valid NuSMV model
+     * @return
      */
-    public static boolean sanityCheck(BufferedReader outputReader, BufferedReader errorReader) {
-        return outputReader.lines().anyMatch(e -> e.contains(CPNet.MODEL_CHECKER_NAME));
+    public boolean verify(NuSmvModel model) {
+        ModelLoader modelLoader = new ModelLoader(model);
+        return loadAndVerify(modelLoader);
     }
+
+    /**
+     * Checks whether the CTL and LTL properties of a NuSMV model are all true.
+     * @param smvInput a text file containing the NuSMV model
+     * @throws FileNotFoundException if <code>smvInput</code> is not an existing, readable file
+     * @throws MalformedNuSMVModelException if <code>smvInput</code> contains an invalid NuSMV model
+     * @return
+     */
+    public boolean verify(Path smvInput) throws FileNotFoundException {
+        if (!Files.isRegularFile(smvInput) || !Files.isReadable(smvInput)) {
+            throw new FileNotFoundException();
+        }
+        ModelLoader modelLoader = new ModelLoader(smvInput.toAbsolutePath().toString(), false);
+        return loadAndVerify(modelLoader);
+    }
+
+    /**
+     * Checks whether the CTL and LTL properties of a NuSMV model are all true.
+     * @param modelLoader
+     * @throws MalformedNuSMVModelException if the input model is not a valid NuSMV model
+     * @throws IllegalStateException if <code>nma</code> has
+     * no {@link it.unibg.nuseen.modeladvisor.metaproperties.MetaPropertyChecker} enabled
+     * @return
+     */
+    private boolean loadAndVerify(ModelLoader modelLoader) {
+        // Evaluate the model.
+        try {
+            modelLoader.loadModel();
+            nma.runCheck(modelLoader);
+        } catch (Exception e) {
+            throw new MalformedNuSMVModelException(e);
+        }
+        // Collect the results.
+        boolean arePropertiesTrue = true;
+        Collection<MetaPropertyChecker> checkers = nma.mapMpClasses.get(NoPropertyIsFalse.class);
+        if (!checkers.isEmpty()) {
+            for (MetaPropertyChecker checker : checkers) {
+                arePropertiesTrue = arePropertiesTrue && (checker.getNumOfViolations() == 0);
+            }
+        } else {
+            throw new IllegalStateException();
+        }
+        return arePropertiesTrue;
+    }
+
+    /**
+     * Creates a {@link NuSmvModel} representation of the trivial model:
+     * <pre>{@code
+     * MODULE main
+     * VAR
+     *     state: {ready, busy};
+     * ASSIGN
+     *     init(state) := ready;
+     * }</pre>
+     * @return
+     */
+    private static NuSmvModel trivialModel() {
+        Module mainModule = NuSMVFactory.eINSTANCE.createModule();
+        mainModule.setName("main");
+
+        Val readyVal = NuSMVFactory.eINSTANCE.createVal();
+        readyVal.setName("ready");
+        Val busyVal = NuSMVFactory.eINSTANCE.createVal();
+        busyVal.setName("busy");
+        EnumType stateEnum = NuSMVFactory.eINSTANCE.createEnumType();
+        stateEnum.getVal().add(readyVal);
+        stateEnum.getVal().add(busyVal);
+
+        VarBody stateVar = NuSMVFactory.eINSTANCE.createVarBody();
+        stateVar.setName("state");
+        stateVar.setSemicolon(true);
+        stateVar.setType(stateEnum);
+        VariableDeclaration varDecl = NuSMVFactory.eINSTANCE.createVariableDeclaration();
+        varDecl.getVars().add(stateVar);
+        mainModule.getModuleElement().add(varDecl);
+
+        ValueExpression readyExpr = NuSMVFactory.eINSTANCE.createValueExpression();
+        readyExpr.setValue("ready");
+        InitBody initAssign = NuSMVFactory.eINSTANCE.createInitBody();
+        initAssign.setVar("state");
+        initAssign.setSemicolon(true);
+        initAssign.setInitial(readyExpr);
+        AssignConstraintElement assignElem = NuSMVFactory.eINSTANCE.createAssignConstraintElement();
+        assignElem.setAssign("ASSIGN");
+        assignElem.getBodies().add(initAssign);
+        mainModule.getModuleElement().add(assignElem);
+
+        NuSmvModel model = NuSMVFactory.eINSTANCE.createNuSmvModel();
+        model.getModules().add(mainModule);
+
+        return model;
+    }
+
 }

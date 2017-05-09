@@ -2,8 +2,6 @@ package it.poliba.enasca.ontocpnets;
 
 import com.google.common.collect.ListMultimap;
 import exception.PreferenceReasonerException;
-import it.poliba.enasca.ontocpnets.except.NuSMVExitStatusException;
-import it.poliba.enasca.ontocpnets.except.NuSMVRuntimeException;
 import it.poliba.enasca.ontocpnets.except.SpecFileParseException;
 import model.Outcome;
 import model.PreferenceMetaData;
@@ -24,26 +22,21 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 /**
  * A CP-net.
  */
 public class CPNet {
-    public static final String MODEL_CHECKER_NAME = "NuSMV";
-    private static final String SMV_FILE_SUFFIX = ".smv";
-    private static final String SMV_TEMPFILE_PREFIX = "nsumv";
-
     // The NuSMV model of the preference specifications.
     private Path smvModel;
-    // The NuSMV binary.
-    private Path nusmvExec;
+    // An object that interacts with the local NuSMV installation.
+    private NuSMVRunner nusmvRunner;
     // A hierarchical structure of preference variables.
     PreferenceGraph graph;
 
     CPNet(CPNet n) {
         smvModel = n.smvModel;
-        nusmvExec = n.nusmvExec;
+        nusmvRunner = n.nusmvRunner;
         graph = n.graph;
     }
 
@@ -68,12 +61,11 @@ public class CPNet {
      */
     public CPNet(Path xmlPrefSpec, Path nusmvExecutable)
             throws SpecFileParseException, IOException {
-        if (!Files.isExecutable(nusmvExecutable)) {
-            throw new FileNotFoundException();
-        }
         if (!Files.isRegularFile(xmlPrefSpec) || !Files.isReadable(xmlPrefSpec)) {
             throw new FileNotFoundException();
         }
+        // Initialize the NuSMV runner.
+        nusmvRunner = new NuSMVRunner(nusmvExecutable);
         // Declare support for NuSMV only.
         Constants.CURRENT_MODEL_CHECKER = Constants.MODEL_CHECKER.NuSMV;
         // Parse the XML input file.
@@ -83,15 +75,10 @@ public class CPNet {
         // Build the NuSMV model and save it in a temporary file.
         smvModel = createSMVModel(prefSpec);
         WorkingPreferenceModel.setPrefMetaData(new PreferenceMetaData(smvModel.toString()));
+        // Test the NuSMV model.
+        nusmvRunner.verify(smvModel);
         // Build the preference graph.
         graph = PreferenceGraph.fromCrisnerSpec(prefSpec);
-        // Verify that the local NuSMV installation works.
-        if (!NuSMVRunner.run(nusmvExecutable, smvModel, NuSMVRunner::sanityCheck)) {
-            throw new NuSMVRuntimeException(
-                    new String[]{nusmvExecutable.toString(), smvModel.toString()},
-                    new RuntimeException("check your NuSMV installation"));
-        }
-        nusmvExec = nusmvExecutable.toAbsolutePath();
     }
 
     public PreferenceGraph getPreferenceGraph() {
@@ -108,7 +95,6 @@ public class CPNet {
      * @throws PreferenceReasonerException if the input parameters are not consistent with this CP-net
      * @throws IOException                 if an I/O error occurs while attempting to write the .smv query file
      *                                     in the default temporary directory
-     * @throws NuSMVExitStatusException    if the NuSMV process exited with a non-zero status code
      * @throws NullPointerException if any argument is <code>null</code>
      */
     public boolean dominates(Outcome better, Outcome worse)
@@ -119,7 +105,7 @@ public class CPNet {
         }
         // Build the NuSMV query file and save it in the default temporary directory.
         String dominanceSpec = smvDominanceSpec(better, worse);
-        Path smvQuery = Files.createTempFile(SMV_TEMPFILE_PREFIX, SMV_FILE_SUFFIX);
+        Path smvQuery = Files.createTempFile(NuSMVRunner.SMV_TEMPFILE_PREFIX, NuSMVRunner.SMV_FILE_SUFFIX);
         OutputStream smvOutputStream = Files.newOutputStream(smvQuery);
         Files.copy(this.smvModel, smvOutputStream);
         try (PrintWriter smvWriter = new PrintWriter(smvOutputStream)) {
@@ -127,16 +113,7 @@ public class CPNet {
             smvWriter.println(dominanceSpec);
         }
         // Invoke NuSMV to perform the dominance query.
-        boolean result = NuSMVRunner.run(this.nusmvExec, smvQuery, (outputReader, errorReader) -> {
-            // Retrieve the line that matches a specific pattern (at most one line is expected).
-            Pattern regex = Pattern.compile("specification.*is\\s*(?:true)|(?:false)$", Pattern.CASE_INSENSITIVE);
-            String line = outputReader.lines()
-                    .filter(regex.asPredicate())
-                    .findFirst()
-                    .orElseThrow(() -> new RuntimeException("the output of NuSMV does not match a known pattern"));
-            // Parse the matching line.
-            return line.toLowerCase().endsWith("true");
-        });
+        boolean result = nusmvRunner.verify(smvQuery);
         // Delete the temporary file.
         Files.deleteIfExists(smvQuery);
         return result;
@@ -161,7 +138,7 @@ public class CPNet {
         } catch (ParserConfigurationException | SAXException | IOException e) {
             throw new SpecFileParseException(prefSpec.getPrefSpecFileName(), e);
         }
-        Path smvModel = Files.createTempFile(SMV_TEMPFILE_PREFIX, SMV_FILE_SUFFIX);
+        Path smvModel = Files.createTempFile(NuSMVRunner.SMV_TEMPFILE_PREFIX, NuSMVRunner.SMV_FILE_SUFFIX);
         smvModel.toFile().deleteOnExit();
         CPTheoryToSMVTranslator translator = new CPTheoryToSMVTranslator();
         try (BufferedWriter writer = Files.newBufferedWriter(smvModel)) {
