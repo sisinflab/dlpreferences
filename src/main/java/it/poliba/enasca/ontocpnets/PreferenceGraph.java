@@ -50,7 +50,15 @@ public class PreferenceGraph {
     }
 
     /**
-     * Builds a <code>Stream</code> of the domain values of each preference variable.
+     * Returns the variable names as a <code>Stream</code>.
+     * @return
+     */
+    public Stream<String> variableNames() {
+        return nodeMap.keySet().stream();
+    }
+
+    /**
+     * Returns the domain values of each preference variable as a <code>Stream</code>.
      * @return
      */
     public Stream<String> domainValues() {

@@ -1,5 +1,6 @@
 package it.poliba.enasca.ontocpnets;
 
+import it.poliba.enasca.ontocpnets.nusmv.NuSMVRunnerTest;
 import model.Outcome;
 import org.testng.AssertJUnit;
 import org.testng.annotations.DataProvider;

@@ -1,4 +1,4 @@
-package it.poliba.enasca.ontocpnets;
+package it.poliba.enasca.ontocpnets.nusmv;
 
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;

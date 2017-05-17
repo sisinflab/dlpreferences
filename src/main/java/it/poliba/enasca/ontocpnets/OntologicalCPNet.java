@@ -174,13 +174,9 @@ public class OntologicalCPNet extends CPNet {
         for (Outcome unverified : unverifiedOutcomes) {
             boolean isDominated = false;
             Iterator<Outcome> feasibleIter = feasibleOutcomes.iterator();
-            try {
-                // Check whether the current unverified outcome is dominated by some feasible outcome.
-                while (feasibleIter.hasNext() && !isDominated) {
-                    isDominated = dominates(feasibleIter.next(), unverified);
-                }
-            } catch (PreferenceReasonerException e) {
-                throw new IllegalStateException("invalid Outcome object", e);
+            // Check whether the current unverified outcome is dominated by some feasible outcome.
+            while (feasibleIter.hasNext() && !isDominated) {
+                isDominated = dominates(feasibleIter.next(), unverified);
             }
             // If the current unverified outcome is undominated among feasible outcomes, it is optimal.
             if (!isDominated) {
