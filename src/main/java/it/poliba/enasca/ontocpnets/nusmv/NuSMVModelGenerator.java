@@ -79,30 +79,14 @@ public class NuSMVModelGenerator {
 
         Stream<String> varList = varsToDomains.entrySet().stream()
                 .map(entry -> indentStr + String.format("%s : %s;", entry.getKey(), entry.getValue()));
-        varList = Stream.concat(varList, Stream.of(indentStr + "gch : {0,1};"));
-
-        Stream<String> frozenVarList = varsToDomains.entrySet().stream()
-                .map(entry -> indentStr + String.format("%s_0 : %s;", entry.getKey(), entry.getValue()));
 
         Stream<String> ivarList = varsToDomains.keySet().stream()
                 .map(varName -> indentStr + String.format("ch%s : {0,1};", varName));
 
-        String defineBody = varsToDomains.keySet().stream()
-                .map(varName -> String.format("%s=%s_0", varName, varName))
-                .collect(Collectors.joining(" & ", "start := ", ";"));
-
-        String transExpression = varsToDomains.keySet().stream()
-                .map(varName -> String.format("%s_0=next(%s_0)", varName, varName))
-                .collect(Collectors.joining(" & ", "", ";"));
-
         return ImmutableList.<String>builder()
                 .add("MODULE main")
                 .add("VAR").addAll(varList.iterator())
-                .add("FROZENVAR").addAll(frozenVarList.iterator())
                 .add("IVAR").addAll(ivarList.iterator())
-                .add("DEFINE").add(defineBody)
-                .add("INIT start=TRUE;")
-                .add("TRANS").add(transExpression)
                 .add("ASSIGN").addAll(assignList.iterator())
                 .build();
     }

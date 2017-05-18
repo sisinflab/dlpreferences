@@ -1,74 +1,46 @@
 MODULE main
 
 VAR
+  R : {Rs,Rl,Rm};
   B : {Bn,Bo};
   W : {Wy,Wn};
-  R : {Rs,Rl,Rm};
   P : {Ps,Pl};
   C : {Cy,Cn};
-  gch : {0,1};
-
-FROZENVAR
-  P_0 : {Ps,Pl};
-  B_0 : {Bn,Bo};
-  R_0 : {Rs,Rl,Rm};
-  C_0 : {Cy,Cn};
-  W_0 : {Wy,Wn};
 IVAR
   chP : {0,1};
-  chB : {0,1};
   chR : {0,1};
+  chB : {0,1};
   chC : {0,1};
   chW : {0,1};
 
-DEFINE
-start := P=P_0 & B=B_0 & R=R_0 & C=C_0 & W=W_0;
-
-INIT start=TRUE;
-TRANS P_0=next(P_0) & B_0=next(B_0) & R_0=next(R_0) & C_0=next(C_0) & W_0=next(W_0);
-
 ASSIGN
+  next(R) :=
+    case
+      R=Rm & chP=0 & chR=1 & chB=0 & chC=0 & chW=0 : Rl; -- #prefR : [] => R=[Rl:Rm, Rm:Rs]  >> []
+      R=Rs & chP=0 & chR=1 & chB=0 & chC=0 & chW=0 : Rm; -- #prefR : [] => R=[Rl:Rm, Rm:Rs]  >> []
+      TRUE : R;
+    esac;
   next(B) :=
     case
-      B=Bn & R=Rs & chP=0 & chB=1 & chR=0 & chC=0 & chW=0 : Bo; -- #prefB1 : [R=Rs] => B=[Bo:Bn]  >> []
-      B=Bo & R=Rm & chP=0 & chB=1 & chR=0 & chC=0 & chW=0 : Bn; -- #prefB2 : [R=Rm] => B=[Bn:Bo]  >> []
-      B=Bo & R=Rl & chP=0 & chB=1 & chR=0 & chC=0 & chW=0 : Bn; -- #prefB3 : [R=Rl] => B=[Bn:Bo]  >> []
+      B=Bn & R=Rs & chP=0 & chR=0 & chB=1 & chC=0 & chW=0 : Bo; -- #prefB1 : [R=Rs] => B=[Bo:Bn]  >> []
+      B=Bo & R=Rl & chP=0 & chR=0 & chB=1 & chC=0 & chW=0 : Bn; -- #prefB3 : [R=Rl] => B=[Bn:Bo]  >> []
+      B=Bo & R=Rm & chP=0 & chR=0 & chB=1 & chC=0 & chW=0 : Bn; -- #prefB2 : [R=Rm] => B=[Bn:Bo]  >> []
       TRUE : B;
     esac;
   next(W) :=
     case
-      W=Wn & chP=0 & chB=0 & chR=0 & chC=0 & chW=1 : Wy; -- #prefW : null => W=[Wy:Wn]  >> []
+      W=Wn & chP=0 & chR=0 & chB=0 & chC=0 & chW=1 : Wy; -- #prefW : [] => W=[Wy:Wn]  >> []
       TRUE : W;
-    esac;
-  next(R) :=
-    case
-      R=Rm & chP=0 & chB=0 & chR=1 & chC=0 & chW=0 : Rl; -- #prefR : null => R=[Rl:Rm, Rm:Rs]  >> []
-      R=Rs & chP=0 & chB=0 & chR=1 & chC=0 & chW=0 : Rm; -- #prefR : null => R=[Rl:Rm, Rm:Rs]  >> []
-      TRUE : R;
     esac;
   next(P) :=
     case
-      P=Pl & B=Bo & chP=1 & chB=0 & chR=0 & chC=0 & chW=0 : Ps; -- #prefP3 : [B=Bo] => P=[Ps:Pl]  >> []
-      P=Ps & C=Cy & B=Bn & chP=1 & chB=0 & chR=0 & chC=0 & chW=0 : Pl; -- #prefP1 : [C=Cy, B=Bn] => P=[Pl:Ps]  >> []
-      P=Pl & C=Cn & chP=1 & chB=0 & chR=0 & chC=0 & chW=0 : Ps; -- #prefP2 : [C=Cn] => P=[Ps:Pl]  >> []
+      P=Ps & C=Cy & B=Bn & chP=1 & chR=0 & chB=0 & chC=0 & chW=0 : Pl; -- #prefP1 : [C=Cy, B=Bn] => P=[Pl:Ps]  >> []
+      P=Pl & C=Cn & chP=1 & chR=0 & chB=0 & chC=0 & chW=0 : Ps; -- #prefP2 : [C=Cn] => P=[Ps:Pl]  >> []
+      P=Pl & B=Bo & chP=1 & chR=0 & chB=0 & chC=0 & chW=0 : Ps; -- #prefP3 : [B=Bo] => P=[Ps:Pl]  >> []
       TRUE : P;
     esac;
   next(C) :=
     case
-      C=Cn & chP=0 & chB=0 & chR=0 & chC=1 & chW=0 : Cy; -- #prefC : null => C=[Cy:Cn]  >> []
+      C=Cn & chP=0 & chR=0 & chB=0 & chC=1 & chW=0 : Cy; -- #prefC : [] => C=[Cy:Cn]  >> []
       TRUE : C;
-    esac;
-  next(gch) :=
-    case
-      B=Bn & R=Rs & chP=0 & chB=1 & chR=0 & chC=0 & chW=0 : 1;
-      B=Bo & R=Rm & chP=0 & chB=1 & chR=0 & chC=0 & chW=0 : 1;
-      B=Bo & R=Rl & chP=0 & chB=1 & chR=0 & chC=0 & chW=0 : 1;
-      W=Wn & chP=0 & chB=0 & chR=0 & chC=0 & chW=1 : 1;
-      R=Rm & chP=0 & chB=0 & chR=1 & chC=0 & chW=0 : 1;
-      R=Rs & chP=0 & chB=0 & chR=1 & chC=0 & chW=0 : 1;
-      P=Pl & B=Bo & chP=1 & chB=0 & chR=0 & chC=0 & chW=0 : 1;
-      P=Ps & C=Cy & B=Bn & chP=1 & chB=0 & chR=0 & chC=0 & chW=0 : 1;
-      P=Pl & C=Cn & chP=1 & chB=0 & chR=0 & chC=0 & chW=0 : 1;
-      C=Cn & chP=0 & chB=0 & chR=0 & chC=1 & chW=0 : 1;
-      TRUE: 0;
     esac;
