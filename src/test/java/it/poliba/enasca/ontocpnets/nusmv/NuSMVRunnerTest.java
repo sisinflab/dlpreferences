@@ -13,7 +13,7 @@ import java.nio.file.Paths;
  */
 @Test(groups = {"nusmv"})
 public class NuSMVRunnerTest {
-    public static final URL NUSMV_EXECUTABLE = NuSMVRunnerTest.class.getResource("/nusmv-2.5.4/bin/NuSMV");
+    public static final URL NUSMV_EXECUTABLE = NuSMVRunnerTest.class.getResource("/nusmv/bin/NuSMV");
 
     @Test(dataProvider = "verifyFromFileProvider")
     public void testVerifyFromFile(Path smvInput) throws Exception {
