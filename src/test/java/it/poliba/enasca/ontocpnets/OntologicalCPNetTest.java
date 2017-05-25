@@ -30,12 +30,12 @@ import java.util.stream.Stream;
 public class OntologicalCPNetTest {
     private OntologicalCPNet cpnet;
     private ImmutableSetMultimap<String, String> preferenceVariables;
-    private OWLOntology augmented;
+    private OWLOntology constrained;
     private Set<OptimalityConstraint> optimalityConstraints;
     private Set<Map<String, String>> outcomesAsMaps;
 
     @Factory(dataProvider = "factoryProvider")
-    public OntologicalCPNetTest(Path xmlPrefSpec, Path baseOntologyPath, Path augmentedOntologyPath,
+    public OntologicalCPNetTest(Path xmlPrefSpec, Path baseOntologyPath, Path constrainedOntologyPath,
                                 ImmutableSetMultimap<String, String> preferenceVariables,
                                 Stream<OptimalityConstraint> optimalityStream,
                                 Stream<Map<String, String>> outcomesAsMaps)
@@ -43,12 +43,12 @@ public class OntologicalCPNetTest {
         // Load the base ontology.
         OWLOntology baseOntology = OWLManager.createOWLOntologyManager()
                 .loadOntologyFromOntologyDocument(baseOntologyPath.toFile());
-        // Load the augmented ontology with a different manager to avoid conflicts.
-        OWLOntology augmentedOntology = OWLManager.createOWLOntologyManager()
-                .loadOntologyFromOntologyDocument(augmentedOntologyPath.toFile());
+        // Load the constrained ontology with a different manager to avoid conflicts.
+        OWLOntology constrainedOntology = OWLManager.createOWLOntologyManager()
+                .loadOntologyFromOntologyDocument(constrainedOntologyPath.toFile());
         // Build the mapping that will be converted into class definition axioms.
         Map<String, OWLClassExpression> preferences =
-                collectOntologicalPreferences(augmentedOntology, preferenceVariables.values().stream());
+                collectOntologicalPreferences(constrainedOntology, preferenceVariables.values().stream());
         // Build the current OntologicalCPNet instance.
         CPNet baseCPNet = new CPNet(xmlPrefSpec, Paths.get(NuSMVRunnerTest.NUSMV_EXECUTABLE.toURI()));
         OntologicalCPNet.Builder cpnetBuilder = OntologicalCPNet.builder(baseCPNet, baseOntology);
@@ -57,7 +57,7 @@ public class OntologicalCPNetTest {
         }
         this.cpnet = cpnetBuilder.build();
         this.preferenceVariables = preferenceVariables;
-        this.augmented = augmentedOntology;
+        this.constrained = constrainedOntology;
         this.optimalityConstraints = optimalityStream.collect(Collectors.toSet());
         this.outcomesAsMaps = outcomesAsMaps.collect(Collectors.toSet());
     }
@@ -68,8 +68,8 @@ public class OntologicalCPNetTest {
         Path hotelXMLPrefSpec = Paths.get(CPNetTest.class.getResource("/hotel_preferences.xml").toURI());
         // The base ontology.
         Path hotelBaseOntology = Paths.get(CPNetTest.class.getResource("/hotel_ontology.owl").toURI());
-        // The "augmented" ontology is constructed by adding preference definitions to the base ontology.
-        Path hotelAugmentedOntology = Paths.get(CPNetTest.class.getResource("/hotel_ontology_augmented.owl").toURI());
+        // The "constrained" ontology is constructed by adding preference definitions to the base ontology.
+        Path hotelConstrainedOntology = Paths.get(CPNetTest.class.getResource("/hotel_ontology_constrained.owl").toURI());
         // The set of preference variables and domain values that are expected to be read from the XML spec file.
         ImmutableSetMultimap<String, String> hotelPreferenceVariables =
                 ImmutableSetMultimap.<String, String>builder()
@@ -126,18 +126,18 @@ public class OntologicalCPNetTest {
                         .put("R", "Rl").put("W", "Wy").put("B", "Bn").put("C", "Cy").put("P", "Pl").build())
                 .build();
         return new Object[][]{
-                {hotelXMLPrefSpec, hotelBaseOntology, hotelAugmentedOntology,
+                {hotelXMLPrefSpec, hotelBaseOntology, hotelConstrainedOntology,
                         hotelPreferenceVariables, hotelOptimalityStream, hotelOutcomes}
         };
     }
 
     @Test
-    public void testAugmentedOntology() throws Exception {
+    public void testConstrainedOntology() throws Exception {
         // Uncomment this line to save the ontology in the default temp directory
         //cpnet.ontology.saveOntology(new RDFXMLDocumentFormat(), Files.newOutputStream(Files.createTempFile("ontology", ".owl")));
         cpnet.ontology.logicalAxioms().forEach(
-                axiom -> Assert.assertTrue(augmented.containsAxiomIgnoreAnnotations(axiom)));
-        Assert.assertEquals(cpnet.ontology.getLogicalAxiomCount(), augmented.getLogicalAxiomCount());
+                axiom -> Assert.assertTrue(constrained.containsAxiomIgnoreAnnotations(axiom)));
+        Assert.assertEquals(cpnet.ontology.getLogicalAxiomCount(), constrained.getLogicalAxiomCount());
     }
 
     @Test
@@ -163,7 +163,7 @@ public class OntologicalCPNetTest {
      * that is for each axiom
      * <pre>{@code SubClassOf(owl:Thing, ObjectUnionOf(X, Y, ...)) }</pre>
      * there exists no proper subset <em>Q</em> of <em>{X, Y, ...}</em> such that
-     * <em>Q</em> is entailed by the augmented ontology.
+     * <em>Q</em> is entailed by the constrained ontology.
      * @throws Exception
      */
     @Test
@@ -183,10 +183,10 @@ public class OntologicalCPNetTest {
                 .map(subset -> df.getOWLSubClassOfAxiom(
                         df.getOWLThing(),
                         df.getOWLObjectUnionOf(subset)))
-                // Assert that the new covering axiom is not entailed by the augmented ontology.
+                // Assert that the new covering axiom is not entailed by the constrained ontology.
                 .forEach(axiom -> Assert.assertFalse(
                         cpnet.applyService(reasoner -> reasoner.isEntailed(axiom)),
-                        String.format("the axiom %s is entailed by the augmented ontology", axiom)));
+                        String.format("the axiom %s is entailed by the constrained ontology", axiom)));
     }
 
     @Test

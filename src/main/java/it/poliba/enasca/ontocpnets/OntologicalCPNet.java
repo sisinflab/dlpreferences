@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 public class OntologicalCPNet extends CPNet {
 
     /**
-     * The augmented ontology, constructed by adding preference domain entities to the base ontology.
+     * The constrained ontology, constructed by adding preference domain entities to the base ontology.
      */
     OWLOntology ontology;
 
@@ -60,7 +60,7 @@ public class OntologicalCPNet extends CPNet {
     /**
      * @param builder
      * @throws OWLOntologyCreationException if the base ontology cannot be copied into
-     * a local {@link OWLOntologyManager} to create the augmented ontology.
+     * a local {@link OWLOntologyManager} to create the constrained ontology.
      */
     private OntologicalCPNet(Builder builder) throws OWLOntologyCreationException {
         super(builder.baseCPNet);
@@ -88,12 +88,12 @@ public class OntologicalCPNet extends CPNet {
         // Copy the base ontology into a local manager.
         ontology = OWLManager.createOWLOntologyManager()
                 .copyOntology(builder.baseOntology, OntologyCopy.SHALLOW);
-        // Add the new axioms to the augmented ontology.
+        // Add the new axioms to the constrained ontology.
         if (ontology.addAxioms(Stream.concat(classDefinitions, partitions))
                 != ChangeApplied.SUCCESSFULLY) {
             throw new OWLRuntimeException("error while applying changes to the new ontology");
         }
-        // Check the augmented ontology for consistency.
+        // Check the constrained ontology for consistency.
         OWLReasoner reasoner = reasonerFactory.createReasoner(ontology);
         boolean arePrefsConsistent = reasoner.isConsistent();
         reasoner.dispose();
@@ -188,7 +188,7 @@ public class OntologicalCPNet extends CPNet {
 
     /**
      * Creates a new buffering <code>OWLReasoner</code> using the internal {@link OWLReasonerFactory},
-     * with the augmented ontology as the root ontology, then executes the specified reasoning service.
+     * with the constrained ontology as the root ontology, then executes the specified reasoning service.
      * The return value of <code>service</code> is relayed to the caller.
      * After <code>service</code> returns, the reasoner is immediately disposed of.
      * @param service
@@ -312,7 +312,7 @@ public class OntologicalCPNet extends CPNet {
             if (solver.implies(closureAsFormula, branchClause)) {
                 return false;
             }
-            // Check whether the augmented ontology entails the current branch axiom.
+            // Check whether the constrained ontology entails the current branch axiom.
             FeasibilityConstraint constraint = new FeasibilityConstraint(branchClause, domainTable);
             OWLSubClassOfAxiom branchAxiom = constraint.asAxiom(concurrentDataFactory, domainTable);
             if (applyService(reasoner -> reasoner.isEntailed(branchAxiom))) {
@@ -553,7 +553,7 @@ public class OntologicalCPNet extends CPNet {
          * <pre>{@code DisjointUnion(owl:Thing, a1, a2, a3, ...)}</pre>
          * is created, in order to "close down the world" with respect to preferences.
          *
-         * <p>The augmented ontology is created by copying the base ontology into a
+         * <p>The constrained ontology is created by copying the base ontology into a
          * local {@link OWLOntologyManager} and adding the new axioms.
          *
          * <p>This method fails if the invoking <code>Builder</code> is in an inconsistent state.
@@ -561,7 +561,7 @@ public class OntologicalCPNet extends CPNet {
          * of the remaining {@link Builder} methods.
          * @return
          * @throws OWLOntologyCreationException if the base ontology cannot be copied into
-         * a local {@link OWLOntologyManager} to create the augmented ontology.
+         * a local {@link OWLOntologyManager} to create the constrained ontology.
          * @throws IllegalStateException if the required parameters are not set properly
          */
         public OntologicalCPNet build() throws OWLOntologyCreationException {
