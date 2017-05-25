@@ -34,7 +34,7 @@ the decision maker assigns to each preference, is planned for a future version.
 ## Usage
 
 Since ontological CP-nets are an extension of CP-nets, a CP-net must be specified first.
-This is achieved by creating an XML document that follows the CRISNER input syntax.
+This is achieved by creating an XML document that follows the [CRISNER][crisner] input syntax.
 A `CPNet` instance is constructed passing the CRISNER spec file and the NuSMV executable as arguments:
 
     CPNet baseCPNet = new CPNet(
