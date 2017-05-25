@@ -1,4 +1,4 @@
-group 'it.poliba.enasca'
+group 'it.poliba.sisinflab'
 version '0.1'
 
 apply plugin: 'java'
