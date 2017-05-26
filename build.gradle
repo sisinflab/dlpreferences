@@ -43,3 +43,9 @@ idea {
         downloadJavadoc = true
     }
 }
+
+task javadocCustomDir(type: Javadoc) {
+    source = sourceSets.main.allJava
+    classpath = sourceSets.main.output + sourceSets.main.compileClasspath
+    destinationDir = file("docs/apidocs")
+}

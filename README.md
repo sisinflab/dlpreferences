@@ -67,6 +67,10 @@ The Pareto-optimal outcomes can now be computed:
 
     Set<Outcome> outcomes = cpnet.paretoOptimal();
 
+## Javadoc
+
+The javadoc is available in the project tree at `docs/apidocs`.
+
 ## Running the tests
 
 Download the latest [NuSMV][nusmv] release, rename the root directory to `nusmv` and place it
