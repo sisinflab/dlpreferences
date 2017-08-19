@@ -35,7 +35,7 @@ the decision maker assigns to each preference, is planned for a future version.
 
 Since ontological CP-nets are an extension of CP-nets, a CP-net must be specified first.
 This is achieved by creating an XML document that follows the [CRISNER][crisner] input syntax.
-A `CPNet` instance is constructed passing the CRISNER spec file and the NuSMV executable as arguments:
+A `CPNet` instance is constructed by passing the CRISNER spec file and the NuSMV executable file as arguments:
 
     CPNet baseCPNet = new CPNet(
         Paths.get("spec.xml"),
@@ -73,14 +73,15 @@ The javadoc is available in the project tree at `docs/apidocs`.
 
 ## Running the tests
 
-Download the latest [NuSMV][nusmv] release, rename the root directory to `nusmv` and place it
-inside `src/test/resources`. The relative path of the NuSMV executable should be
-
-    src/test/resources/nusmv/bin/NuSMV
-
-From the root directory, run the tests with
+If [NuSMV][nusmv] is installed and its main binary is accessible via the system's PATH environment variable,
+no further action is required; simply run the tests with
 
     gradlew test
+
+To specify a custom location for the NuSMV executable file, use its absolute path as value
+of the `nusmv-path` parameter in the TestNG configuration file, which is located at
+
+    src/test/testng.xml
 
 ## Status
 

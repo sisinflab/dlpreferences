@@ -1,0 +1,20 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+
+<suite name="Unit">
+    <!-- This value specifies the path to the NuSMV executable file.
+         If left empty, the executable is searched within the system's PATH. -->
+    <parameter name="nusmv-path" value=""/>
+
+    <parameter name="hotel-model-resource" value="/hotel_model.smv"/>
+    <parameter name="hotel-cpnet-resource" value="/hotel_preferences.xml"/>
+    <parameter name="hotel-base-ontology-resource" value="/hotel_ontology.owl"/>
+    <parameter name="hotel-constrained-ontology-resource" value="/hotel_ontology_constrained.owl"/>
+
+    <test name="All">
+        <packages>
+            <package name="it.poliba.sisinflab.dlpreferences"/>
+            <package name="it.poliba.sisinflab.dlpreferences.nusmv"/>
+            <package name="it.poliba.sisinflab.dlpreferences.tree"/>
+        </packages>
+    </test>
+</suite>

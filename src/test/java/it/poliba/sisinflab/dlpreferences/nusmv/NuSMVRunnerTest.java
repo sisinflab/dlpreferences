@@ -1,10 +1,9 @@
 package it.poliba.sisinflab.dlpreferences.nusmv;
 
-import org.testng.annotations.DataProvider;
+import org.testng.annotations.Optional;
+import org.testng.annotations.Parameters;
 import org.testng.annotations.Test;
 
-import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -13,19 +12,12 @@ import java.nio.file.Paths;
  */
 @Test(groups = {"nusmv"})
 public class NuSMVRunnerTest {
-    public static final URL NUSMV_EXECUTABLE = NuSMVRunnerTest.class.getResource("/nusmv/bin/NuSMV");
 
-    @Test(dataProvider = "verifyFromFileProvider")
-    public void testVerifyFromFile(Path smvInput) throws Exception {
-        NuSMVRunner runner = new NuSMVRunner(Paths.get(NUSMV_EXECUTABLE.toURI()));
-        runner.verify(smvInput);
-    }
-
-    @DataProvider
-    public Object[][] verifyFromFileProvider() throws URISyntaxException {
-        return new Object[][]{
-                {Paths.get(NuSMVRunnerTest.class.getResource("/hotel_model.smv").toURI())}
-        };
+    @Parameters({"nusmv-path", "hotel-model-resource"})
+    public void testVerifyFromFile(@Optional("") String nusmvPathStr, String hotelModelRes) throws Exception {
+        Path nusmvPath = Paths.get(nusmvPathStr);
+        Path hotelModel = Paths.get(NuSMVRunnerTest.class.getResource(hotelModelRes).toURI());
+        new NuSMVRunner(nusmvPath).verify(hotelModel);
     }
 
 }

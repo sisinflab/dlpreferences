@@ -35,7 +35,9 @@ dependencies {
 }
 
 test {
-    useTestNG()
+    useTestNG {
+        suites "src/test/testng.xml"
+    }
 }
 
 idea {

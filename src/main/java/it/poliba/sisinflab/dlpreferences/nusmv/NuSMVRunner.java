@@ -8,13 +8,17 @@ import it.unibg.nuseen.modeladvisor.metaproperties.MetaPropertyChecker;
 import it.unibg.nuseen.modeladvisor.metaproperties.NoPropertyIsFalse;
 import it.unibg.nuseen.nusmvlanguage.nuSMV.NuSmvModel;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -40,17 +44,40 @@ public class NuSMVRunner {
      * Creates a <code>NuSMVRunner</code> instance that verifies NuSMV models
      * using the specified NuSMV executable file.
      * <p>
+     * A NuSMV-compatible binary is searched in the directories specified by the system's PATH environment variable.
+     * If PATH does not contain an executable file named <code>NuSMV</code> or <code>nuXmv</code>
+     * (lowercase names are also checked), a {@link FileNotFoundException} is raised.
+     * To provide a specific path for the NuSMV binary, use {@link #NuSMVRunner(Path)}.
+     * <p>
      * NuSMVRunner may need to store an on-disk representation of the model being verified,
      * in the form of a .smv file in the system temp directory.
      * The system temp directory is specified by the JRE property <code>java.io.tmpdir</code>.
      *
-     * @param nusmvExec the NuSMV executable file
+     * @throws IllegalStateException if the PATH environment variable is not defined.
+     * @throws FileNotFoundException if none of the directories specified by the system's PATH environment variable
+     * contain an executable file named <code>NuSMV</code> or <code>nuXmv</code> (lowercase names are also checked).
+     * @throws IOException if an I/O error occurs while attempting to write in the system temp directory.
+     */
+    public NuSMVRunner() throws IOException {
+        this(Paths.get(""));
+    }
+
+    /**
+     * Allows for specifying the path of the NuSMV-compatible binary.
+     * If invoked with an empty or <code>null</code> path, this constructor is equivalent to {@link #NuSMVRunner()}.
+     *
+     * @param nusmvExec the NuSMV executable file. If empty or <code>null</code>, a suitable file is searched
+     *                  in the system's PATH (equivalent to invoking {@link #NuSMVRunner()}).
      * @throws FileNotFoundException if <code>nusmvExec</code> is not an existing, executable file.
      * @throws IOException if an I/O error occurs while attempting to write in the system temp directory.
      */
     public NuSMVRunner(Path nusmvExec) throws IOException {
-        if (!Files.isExecutable(nusmvExec)) {
-            throw new FileNotFoundException();
+        if (nusmvExec == null || nusmvExec.toString().isEmpty()) {
+            nusmvExec = findBinaries(Stream.of("NuSMV", "nuXmv"))
+                    .findFirst()
+                    .orElseThrow(() -> new FileNotFoundException("No NuSMV-compatible binary found in the system's PATH."));
+        } else if (!Files.isExecutable(nusmvExec)) {
+            throw new FileNotFoundException(nusmvExec.toString());
         }
         // Set up the NuSMV executor.
         modelPath = Files.createTempFile(SMV_FILE_PREFIX, SMV_FILE_SUFFIX);
@@ -68,6 +95,9 @@ public class NuSMVRunner {
                 false,  // disable check for "Every independent variable is used"
                 true    // enable check for "Every property is true and no property is vacuously satisfied"
         );
+        // This attribute determines whether the execution of NuSMV is controlled
+        // by the "org.eclipselabs.nusmvtools.nusmv4j" Java library.
+        // By setting it to false, NuSMV is executed as an external process.
         NuSMVExecutor.jna = false;
         // Check the local NuSMV installation by verifying a trivial model.
         verify(TRIVIAL_MODEL);
@@ -164,6 +194,36 @@ public class NuSMVRunner {
             throw new IllegalStateException();
         }
         return arePropertiesTrue;
+    }
+
+    /**
+     * Searches system's PATH for the executable files specified in <code>filenames</code>.
+     * For each element of <code>filenames</code> successfully resolved against a system PATH directory
+     * as an executable file, the corresponding {@link Path} is added to the return <code>Stream</code>.
+     * Lowercase variants of the elements in <code>filenames</code> are also checked.
+     *
+     * @param filenames
+     * @throws IllegalStateException if the PATH environment variable is not defined.
+     * @return
+     */
+    private Stream<Path> findBinaries(Stream<String> filenames) {
+        String pathEnv = System.getenv("PATH");
+        if (pathEnv == null) {
+            throw new IllegalStateException("PATH environment variable not defined.");
+        }
+        if (pathEnv.isEmpty()) {
+            return Stream.empty();
+        }
+        // Add lowercase elements to the Stream argument.
+        Set<String> filenamesWithLower =
+                filenames.flatMap(f -> Stream.of(f, f.toLowerCase()))
+                        .collect(Collectors.toSet());
+        // Search the system's PATH.
+        return Pattern.compile(Pattern.quote(File.pathSeparator))
+                .splitAsStream(pathEnv)  // split into directory names
+                .map(Paths::get)  // build a Path object from each directory
+                .flatMap(directory -> filenamesWithLower.stream().map(directory::resolve))  // build a full Path from each file name
+                .filter(path -> Files.isExecutable(path) && !Files.isDirectory(path));
     }
 
 }
