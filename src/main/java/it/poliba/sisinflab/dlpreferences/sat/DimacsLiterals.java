@@ -33,12 +33,25 @@ public class DimacsLiterals {
     /**
      * Returns a <code>DimacsLiterals</code> object containing the specified literal.
      * If the argument is 0, an empty <code>DimacsLiterals</code> is returned.
+     *
      * @param literal
+     * @return
      */
     public static DimacsLiterals of(int literal) {
         return literal != 0 ?
                 new DimacsLiterals(new int[]{literal}) :
                 new DimacsLiterals(new int[]{});
+    }
+
+    /**
+     * Returns a <code>DimacsLiterals</code> object containing the specified literals.
+     * Duplicate values and zeroes are discarded.
+     *
+     * @param literals
+     * @return
+     */
+    public static DimacsLiterals of(int... literals) {
+        return new DimacsLiterals(Arrays.stream(literals));
     }
 
     public IntStream stream() {
@@ -63,5 +76,10 @@ public class DimacsLiterals {
     @Override
     public int hashCode() {
         return Arrays.hashCode(literals);
+    }
+
+    @Override
+    public String toString() {
+        return Arrays.toString(literals);
     }
 }

@@ -62,6 +62,20 @@ public class BooleanFormula {
     }
 
     /**
+     * Returns the highest literal among the clauses in this formula.
+     * Normally, this value represents the number of variables in a boolean problem.
+     *
+     * @return the highest literal (in its absolute value) among the clauses in this formula,
+     * or <code>0</code> if the formula is empty.
+     */
+    public int max() {
+        return clauses()
+                .flatMapToInt(DimacsLiterals::stream)  // build a stream of literals
+                .map(literal -> literal < 0 ? -literal : literal)  // convert to absolute values
+                .max().orElse(0);  // find the highest literal
+    }
+
+    /**
      * Returns a new empty formula.
      * @return
      */
@@ -80,7 +94,7 @@ public class BooleanFormula {
     /**
      * Returns a <code>Collector</code> that accumulates input clauses into a new formula.
      * @return
-     * @see SAT4JSolver#solve(BooleanFormula)
+     * @see SAT4JSolver#solveSAT(BooleanFormula)
      */
     public static Collector<DimacsLiterals, ?, BooleanFormula> toFormula() {
         return Collectors.collectingAndThen(
@@ -92,7 +106,7 @@ public class BooleanFormula {
      * Returns a <code>Collector</code> that accumulates input clauses into a new formula,
      * backed by a synchronized set.
      * @return
-     * @see SAT4JSolver#solve(BooleanFormula)
+     * @see SAT4JSolver#solveSAT(BooleanFormula)
      */
     public static Collector<DimacsLiterals, ?, BooleanFormula> toSynchronizedFormula() {
         return Collectors.collectingAndThen(

@@ -16,6 +16,7 @@ dependencies {
 
     // external libraries
     compile "org.ow2.sat4j:org.ow2.sat4j.core:2.3.+"  // SAT solver
+    compile "org.ow2.sat4j:org.ow2.sat4j.pb:2.3.+"  // Pseudo-boolean solver
     compile "net.sourceforge.owlapi:owlapi-distribution:5.0.+"  // the OWL API
     compile "net.sourceforge.owlapi:org.semanticweb.hermit:1.3.8.+"  // HermiT reasoner
     compile "com.google.guava:guava:20.+" // Guava libraries

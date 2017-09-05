@@ -211,7 +211,7 @@ public class OntologicalCPNet extends CPNet {
     public Stream<DimacsLiterals> solveConstraints(
             ConstraintSet<? extends Constraint> constraints) {
         BooleanFormula formula = constraints.clauses().collect(BooleanFormula.toFormula());
-        return solver.solve(formula);
+        return solver.solveSAT(formula);
     }
 
     /**

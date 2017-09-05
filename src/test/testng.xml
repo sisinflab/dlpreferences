@@ -14,6 +14,7 @@
         <packages>
             <package name="it.poliba.sisinflab.dlpreferences"/>
             <package name="it.poliba.sisinflab.dlpreferences.nusmv"/>
+            <package name="it.poliba.sisinflab.dlpreferences.sat"/>
             <package name="it.poliba.sisinflab.dlpreferences.tree"/>
         </packages>
     </test>
