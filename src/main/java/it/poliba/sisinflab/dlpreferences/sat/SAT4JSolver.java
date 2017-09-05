@@ -130,7 +130,7 @@ public class SAT4JSolver {
      * <pre>
      *    sum(Pi for each positive variable Pi in the clause)
      * +  sum((1-Qi) for each negated variable Qi in the clause)
-     * >= 1
+     * &gt;= 1
      * </pre>
      *
      * The <code>objective</code> parameter is a a stream of integer coefficients <code>c1, c2, &hellip;</code>
